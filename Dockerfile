@@ -9,8 +9,8 @@ RUN apt-get update && \
     apt-get install -y python3 python3-pip && \
     rm -rf /var/lib/apt/lists/*
 
-# Install jsonschema package
-RUN pip3 install jsonschema
+# Install jsonschema package with pinned version
+RUN pip3 install jsonschema==4.26.0
 
 # Create working directory
 WORKDIR /workspace
