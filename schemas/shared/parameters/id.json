@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Shared parameter: id",
+  "description": "OpenAPI parameter in `path`. Unique identifier of the resource.. Shared by API Register and OSS Register.",
+  "x-openapi-parameter": {
+    "name": "id",
+    "in": "path",
+    "required": true,
+    "source": [
+      "https://api.developer.overheid.nl/api-register/v1/openapi.json",
+      "https://api.developer.overheid.nl/oss-register/v1/openapi.json"
+    ]
+  },
+  "type": "string"
+}

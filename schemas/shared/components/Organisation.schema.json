@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Organisation",
+  "description": "An organisation from the catalog",
+  "type": "object",
+  "allOf": [
+    {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "Organisation summary",
+      "description": "An organisation from the catalog",
+      "type": "object",
+      "properties": {
+        "uri": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "title": "Organisation URI",
+          "description": "The unique identifier for an organisation",
+          "type": "string",
+          "format": "uri",
+          "examples": [
+            "https://developer.overheid.nl"
+          ]
+        },
+        "label": {
+          "description": "The label of the organisation",
+          "type": "string",
+          "examples": [
+            "developer.overheid.nl"
+          ]
+        }
+      },
+      "required": [
+        "uri",
+        "label"
+      ]
+    }
+  ]
+}

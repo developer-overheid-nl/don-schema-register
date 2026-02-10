@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Shared parameter: page",
+  "description": "OpenAPI parameter in `query`. Page number (1-based).. Shared by API Register and OSS Register.",
+  "x-openapi-parameter": {
+    "name": "page",
+    "in": "query",
+    "required": false,
+    "source": [
+      "https://api.developer.overheid.nl/api-register/v1/openapi.json",
+      "https://api.developer.overheid.nl/oss-register/v1/openapi.json"
+    ]
+  },
+  "type": "integer",
+  "minimum": 1,
+  "default": 1
+}

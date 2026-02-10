@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Organisation URI",
+  "description": "The unique identifier for an organisation",
+  "type": "string",
+  "format": "uri",
+  "examples": [
+    "https://developer.overheid.nl"
+  ]
+}

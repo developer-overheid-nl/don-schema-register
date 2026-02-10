@@ -1,13 +1,18 @@
 {
   "url": "http://localhost:8000",
   "html": {
-    "name": "DON Schema Register (Test)"
+    "name": "DON Schema Register"
   },
   "contents": {
-    "my-first-collection": {
-      "title": "My first collection",
-      "description": "A test collection configured with Sourcemeta One.",
-      "path": "./schemas"
+    "shared-components": {
+      "title": "Shared OpenAPI Components",
+      "description": "Identical components/schemas shared by API Register and OSS Register.",
+      "path": "./schemas/shared/components"
+    },
+    "shared-parameters": {
+      "title": "Shared OpenAPI Parameters",
+      "description": "Identical OpenAPI parameters shared by API Register and OSS Register, represented as JSON Schema.",
+      "path": "./schemas/shared/parameters"
     }
   }
 }

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Shared parameter: perPage",
+  "description": "OpenAPI parameter in `query`. Number of results per page.. Shared by API Register and OSS Register.",
+  "x-openapi-parameter": {
+    "name": "perPage",
+    "in": "query",
+    "required": false,
+    "source": [
+      "https://api.developer.overheid.nl/api-register/v1/openapi.json",
+      "https://api.developer.overheid.nl/oss-register/v1/openapi.json"
+    ]
+  },
+  "type": "integer",
+  "minimum": 1,
+  "maximum": 100,
+  "default": 20
+}

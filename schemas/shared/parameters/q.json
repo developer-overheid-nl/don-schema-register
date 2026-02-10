@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Shared parameter: q",
+  "description": "OpenAPI parameter in `query`. Search term.. Shared by API Register and OSS Register.",
+  "x-openapi-parameter": {
+    "name": "q",
+    "in": "query",
+    "required": true,
+    "source": [
+      "https://api.developer.overheid.nl/api-register/v1/openapi.json",
+      "https://api.developer.overheid.nl/oss-register/v1/openapi.json"
+    ]
+  },
+  "type": "string"
+}
