@@ -1,0 +1,13 @@
+{
+  "url": "http://localhost:8000",
+  "html": {
+    "name": "DON Schema Register (Test)"
+  },
+  "contents": {
+    "my-first-collection": {
+      "title": "My first collection",
+      "description": "A test collection configured with Sourcemeta One.",
+      "path": "./schemas"
+    }
+  }
+}
