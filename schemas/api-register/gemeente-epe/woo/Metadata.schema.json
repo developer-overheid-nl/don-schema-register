@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Metadata",
+  "description": "Metadata object for Woo object",
+  "properties": {
+    "volgnummer": {
+      "type": "string",
+      "nullable": true
+    },
+    "besluitdatum": {
+      "type": "string",
+      "nullable": true,
+      "description": "format: Y-m-d"
+    },
+    "verzoek": {
+      "$ref": "./Verzoek.schema.json"
+    }
+  }
+}

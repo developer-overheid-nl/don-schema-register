@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Thema",
+  "properties": {
+    "hoofdthema": {
+      "type": "string",
+      "nullable": true
+    },
+    "subthema": {
+      "type": "string",
+      "nullable": true
+    },
+    "aanvullendThema": {
+      "type": "string",
+      "nullable": true
+    }
+  },
+  "required": ["hoofdthema"]
+}

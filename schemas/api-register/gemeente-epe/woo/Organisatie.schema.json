@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "Organisatie",
+  "properties": {
+    "id": {
+      "type": "string",
+      "nullable": true
+    },
+    "uuid": {
+      "type": "string",
+      "nullable": true
+    },
+    "oin": {
+      "type": "string",
+      "nullable": true
+    },
+    "tooi": {
+      "type": "string",
+      "nullable": true
+    },
+    "rsin": {
+      "type": "string",
+      "nullable": true
+    },
+    "naam": {
+      "type": "string",
+      "nullable": true
+    }
+  },
+  "required": ["naam"]
+}

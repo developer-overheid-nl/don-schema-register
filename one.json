@@ -4,15 +4,20 @@
     "name": "DON Schema Register"
   },
   "contents": {
-    "shared-components": {
-      "title": "Shared OpenAPI Components",
-      "description": "Identical components/schemas shared by API Register and OSS Register.",
-      "path": "./schemas/shared/components"
+    "api-register": {
+      "title": "API-register schemas",
+      "description": "Automatisch gegenereerde JSON Schemas uit het API-register.",
+      "path": "./schemas/api-register"
     },
-    "shared-parameters": {
-      "title": "Shared OpenAPI Parameters",
-      "description": "Identical OpenAPI parameters shared by API Register and OSS Register, represented as JSON Schema.",
-      "path": "./schemas/shared/parameters"
+    "adr": {
+      "title": "ADR schemas",
+      "description": "API Design Rules JSON Schemas.",
+      "path": "./schemas/adr"
+    },
+    "stelsel-catalogus": {
+      "title": "Stelsel Catalogus schemas",
+      "description": "Stelsel Catalogus JSON Schemas.",
+      "path": "./schemas/stelsel-catalogus"
     }
   }
 }
