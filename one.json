@@ -1,23 +1,26 @@
 {
-  "url": "https://schemas.don.apps.digilab.network/",
+  "url": "https://schemas.don.apps.digilab.network",
   "html": {
     "name": "DON Schema Register"
   },
   "contents": {
     "api-register": {
-      "title": "API-register schemas",
+      "title": "API-register",
       "description": "Automatisch gegenereerde JSON Schemas uit het API-register.",
-      "path": "./schemas/api-register"
+      "path": "./schemas/api-register",
+      "x-sourcemeta-one:alert": "WARNING: DO NOT USE THESE SCHEMAS IN PRODUCTION! These schemas are work-in-progress and are meant for demo purposes only."
     },
     "adr": {
-      "title": "ADR schemas",
+      "title": "API Design Rules",
       "description": "API Design Rules JSON Schemas.",
-      "path": "./schemas/adr"
+      "path": "./schemas/adr",
+      "x-sourcemeta-one:alert": "WARNING: DO NOT USE THESE SCHEMAS IN PRODUCTION! These schemas are work-in-progress and are meant for demo purposes only."
     },
     "stelsel-catalogus": {
-      "title": "Stelsel Catalogus schemas",
+      "title": "Stelsel Catalogus",
       "description": "Stelsel Catalogus JSON Schemas.",
-      "path": "./schemas/stelsel-catalogus"
+      "path": "./schemas/stelsel-catalogus",
+      "x-sourcemeta-one:alert": "WARNING: DO NOT USE THESE SCHEMAS IN PRODUCTION! These schemas are work-in-progress and are meant for demo purposes only."
     }
   }
 }
