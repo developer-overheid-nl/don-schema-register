@@ -16,10 +16,10 @@
       "path": "./schemas/adr",
       "x-sourcemeta-one:alert": "WARNING: DO NOT USE THESE SCHEMAS IN PRODUCTION! These schemas are work-in-progress and are meant for demo purposes only."
     },
-    "stelsel-catalogus": {
+    "stelselcatalogus": {
       "title": "Stelsel Catalogus",
       "description": "Stelsel Catalogus JSON Schemas.",
-      "path": "./schemas/stelsel-catalogus",
+      "path": "./schemas/stelselcatalogus",
       "x-sourcemeta-one:alert": "WARNING: DO NOT USE THESE SCHEMAS IN PRODUCTION! These schemas are work-in-progress and are meant for demo purposes only."
     }
   }
