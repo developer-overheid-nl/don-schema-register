@@ -27,6 +27,12 @@
       "description": "Policy-as-Code JSON Schemas.",
       "path": "./schemas/policy-as-code",
       "x-sourcemeta-one:alert": "WARNING: DO NOT USE THESE SCHEMAS IN PRODUCTION! These schemas are work-in-progress and are meant for demo purposes only."
+    },
+    "demo": {
+      "title": "Demo",
+      "description": "Demo Schemas.",
+      "path": "./schemas/demo",
+      "x-sourcemeta-one:alert": "WARNING: DO NOT USE THESE SCHEMAS IN PRODUCTION! These schemas are work-in-progress and are meant for demo purposes only."
     }
   }
 }
