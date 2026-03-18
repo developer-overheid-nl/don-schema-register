@@ -1,0 +1,8 @@
+{
+  "$id": "https://schemas.don.apps.digilab.network/policy-as-code/csp-combined",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    { "$ref": "./policy-base.json" },
+    { "$ref": "./csp.json" }
+  ]
+}

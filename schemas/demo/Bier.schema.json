@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.don.apps.digilab.network/demo/bier",
+  "title": "Bier",
+  "description": "Bier",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unieke identifier",
+      "examples": ["046b6c7f-0b8a-43b9-b35d-6489e6daee92"]
+    },
+    "naam": {
+      "type": "string",
+      "description": "Naam",
+      "examples": ["Weizen Tripel"]
+    },
+    "alcoholPercentage": {
+      "type": "number",
+      "description": "Alcoholpercentage",
+      "examples": [7.6]
+    },
+    "bierstijl": {
+      "$ref": "./Bierstijl.schema.json"
+    },
+    "brouwerij": {
+      "$ref": "./Brouwerij.schema.json"
+    }
+  },
+  "required": ["id", "naam", "alcoholPercentage", "bierstijl"],
+  "additionalProperties": false
+}

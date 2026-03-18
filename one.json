@@ -17,9 +17,15 @@
       "x-sourcemeta-one:alert": "WARNING: DO NOT USE THESE SCHEMAS IN PRODUCTION! These schemas are work-in-progress and are meant for demo purposes only."
     },
     "stelselcatalogus": {
-      "title": "Stelsel Catalogus",
-      "description": "Stelsel Catalogus JSON Schemas.",
+      "title": "Stelselcatalogus",
+      "description": "Stelselcatalogus JSON Schemas.",
       "path": "./schemas/stelselcatalogus",
+      "x-sourcemeta-one:alert": "WARNING: DO NOT USE THESE SCHEMAS IN PRODUCTION! These schemas are work-in-progress and are meant for demo purposes only."
+    },
+    "policy-as-code": {
+      "title": "Policy-as-Code",
+      "description": "Policy-as-Code JSON Schemas.",
+      "path": "./schemas/policy-as-code",
       "x-sourcemeta-one:alert": "WARNING: DO NOT USE THESE SCHEMAS IN PRODUCTION! These schemas are work-in-progress and are meant for demo purposes only."
     }
   }
