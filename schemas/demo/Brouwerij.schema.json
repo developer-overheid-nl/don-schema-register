@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.don.apps.digilab.network/demo/brouwerij",
   "title": "Brouwerij",
-  "description": "Brouwerij",
+  "description": "De brouwerij, inclusief naam, grootte en adres",
   "type": "object",
   "properties": {
     "id": {

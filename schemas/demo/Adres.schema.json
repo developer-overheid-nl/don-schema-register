@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.don.apps.digilab.network/demo/adres",
   "title": "Adres",
-  "description": "Adres",
+  "description": "Adres van een brouwerij",
   "type": "object",
   "properties": {
     "straat": {

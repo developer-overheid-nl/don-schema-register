@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.don.apps.digilab.network/demo/bierstijl",
   "title": "Bierstijl",
-  "description": "Bierstijl",
+  "description": "De bierstijl van een bier, bijvoorbeeld 'Quadrupel' of 'Weizen Tripel'",
   "type": "object",
   "properties": {
     "id": {
@@ -13,7 +13,7 @@
     },
     "naam": {
       "type": "string",
-      "description": "Naam",
+      "description": "Naam van de bierstijl",
       "examples": ["Quadrupel"]
     }
   },
