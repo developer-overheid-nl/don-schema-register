@@ -1,0 +1,49 @@
+publiccodeYmlVersion: "0.5"
+
+name: DON Schema Register
+url: https://github.com/developer-overheid-nl/don-schema-register
+landingURL: https://schemas.don.apps.digilab.network
+softwareType: standalone/web
+
+platforms:
+  - web
+
+developmentStatus: concept
+
+description:
+  nl:
+    shortDescription: >-
+      Overzicht van JSON Schema's beschikbaar binnen de overheid, voor het
+      zoeken en standaardiseren van datamodellen.
+    longDescription: |
+      Het developer.overheid.nl Schema Register is een overzicht van JSON
+      Schema's die beschikbaar zijn binnen de overheid. Het stelt organisaties
+      in staat om te zoeken naar bestaande JSON Schema's en beoogt zo gebruikte
+      datamodellen te standaardiseren. De documentatie wordt gegenereerd en
+      geserveerd met Sourcemeta One en bevat schema's voor het API-register,
+      API Design Rules (ADR) en de Stelsel Catalogus.
+    features:
+      - JSON Schema-documentatie genereren en serveren
+      - Ondersteuning voor meerdere schema-collecties (API-register, ADR, Stelsel Catalogus)
+      - Geautomatiseerde Docker-buildpipeline via GitHub Actions
+
+legal:
+  license: EUPL-1.2
+  mainCopyrightOwner: Geonovum
+
+intendedAudience:
+  countries:
+    - NL
+  scope:
+    - government
+
+localisation:
+  localisationReady: false
+  availableLanguages:
+    - nl
+
+maintenance:
+  type: internal
+  contacts:
+    - name: Team developer.overheid.nl
+      affiliation: Stichting Geonovum
