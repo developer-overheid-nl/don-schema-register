@@ -1,5 +1,4 @@
 {
-  "$id": "https://schemas.don.apps.digilab.network/policy-as-code/hsts",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "HSTS Configuration Schema",
   "type": "object",
