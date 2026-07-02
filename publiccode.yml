@@ -1,0 +1,51 @@
+publiccodeYmlVersion: "0.5.0"
+
+name: API van het Schema register
+url: "https://github.com/developer-overheid-nl/don-schema-register"
+landingURL: "https://schemas.developer.overheid.nl"
+softwareType: standalone/web
+platforms:
+  - web
+
+categories:
+  - it-management
+developmentStatus: concept
+
+description:
+  nl:
+    shortDescription: >-
+      API van het Schema register (schemas.developer.overheid.nl)
+    longDescription: |
+      De API van het Schema-register maakt JSON Schemas van de overheid beter
+      vindbaar en herbruikbaar. Via deze API kunnen organisaties, ontwikkelaars en
+      dienstverleners actuele metadata over JSON Schemas ophalen en verwerken in
+      eigen toepassingen.
+    features:
+      - Doorzoekbare catalogus van JSON Schemas
+
+legal:
+  license: EUPL-1.2
+  mainCopyrightOwner: Geonovum
+
+organisation:
+  name: Geonovum
+  uri: https://www.geonovum.nl/
+
+intendedAudience:
+  countries:
+    - NL
+  scope:
+    - government
+
+localisation:
+  availableLanguages:
+    - nl
+  localisationReady: false
+
+maintenance:
+  type: internal
+
+  contacts:
+    - name: developer.overheid.nl
+      email: developer.overheid@geonovum.nl
+      affiliation: Geonovum
