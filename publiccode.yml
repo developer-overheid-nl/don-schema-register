@@ -1,35 +1,35 @@
-publiccodeYmlVersion: "0.5"
+publiccodeYmlVersion: "0.7.0"
 
-name: DON Schema Register
-url: https://github.com/developer-overheid-nl/don-schema-register
-landingURL: https://schemas.don.apps.digilab.network
+name: API van het Schema register
+url: "https://github.com/developer-overheid-nl/don-schema-register"
+landingURL: "https://schemas.developer.overheid.nl"
 softwareType: standalone/web
-
 platforms:
   - web
 
+categories:
+  - it-management
 developmentStatus: concept
 
 description:
   nl:
     shortDescription: >-
-      Overzicht van JSON Schema's beschikbaar binnen de overheid, voor het
-      zoeken en standaardiseren van datamodellen.
+      API van het Schema register (schemas.developer.overheid.nl)
     longDescription: |
-      Het developer.overheid.nl Schema Register is een overzicht van JSON
-      Schema's die beschikbaar zijn binnen de overheid. Het stelt organisaties
-      in staat om te zoeken naar bestaande JSON Schema's en beoogt zo gebruikte
-      datamodellen te standaardiseren. De documentatie wordt gegenereerd en
-      geserveerd met Sourcemeta One en bevat schema's voor het API-register,
-      API Design Rules (ADR) en de Stelsel Catalogus.
+      De API van het Schema-register maakt JSON Schemas van de overheid beter
+      vindbaar en herbruikbaar. Via deze API kunnen organisaties, ontwikkelaars en
+      dienstverleners actuele metadata over JSON Schemas ophalen en verwerken in
+      eigen toepassingen.
     features:
-      - JSON Schema-documentatie genereren en serveren
-      - Ondersteuning voor meerdere schema-collecties (API-register, ADR, Stelsel Catalogus)
-      - Geautomatiseerde Docker-buildpipeline via GitHub Actions
+      - Doorzoekbare catalogus van JSON Schemas
 
 legal:
   license: EUPL-1.2
   mainCopyrightOwner: Geonovum
+
+organisation:
+  name: Geonovum
+  uri: https://www.geonovum.nl/
 
 intendedAudience:
   countries:
@@ -38,12 +38,14 @@ intendedAudience:
     - government
 
 localisation:
-  localisationReady: false
   availableLanguages:
     - nl
+  localisationReady: false
 
 maintenance:
   type: internal
+
   contacts:
-    - name: Team developer.overheid.nl
-      affiliation: Stichting Geonovum
+    - name: developer.overheid.nl
+      email: developer.overheid@geonovum.nl
+      affiliation: Geonovum
