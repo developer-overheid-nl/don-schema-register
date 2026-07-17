@@ -211,6 +211,61 @@ func TestSaveSchemaIdempotentOnURL(t *testing.T) {
 	require.Len(t, all, 1)
 }
 
+func TestSaveSchemaIdempotentOnSourceMetaIdentifier(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	first := &models.Schema{
+		Id:                   "x",
+		Title:                "Eerste",
+		SourceMetaIdentifier: "https://schemas.example.org/schema",
+		SourceMetaHealth:     80,
+	}
+	require.NoError(t, repo.SaveSchema(ctx, first))
+
+	second := &models.Schema{
+		Id:                   "y",
+		Title:                "Tweede",
+		SourceMetaIdentifier: "https://schemas.example.org/schema",
+		SourceMetaHealth:     90,
+	}
+	require.NoError(t, repo.SaveSchema(ctx, second))
+	require.Equal(t, "x", second.Id)
+
+	all, err := repo.AllSchemas(ctx)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	require.Equal(t, "Tweede", all[0].Title)
+	require.Equal(t, 90, all[0].SourceMetaHealth)
+}
+
+func TestSaveSourceMetaSchemaDoesNotOverwriteManualSchemaByURL(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	manual := &models.Schema{
+		Id:        "manual",
+		Title:     "Handmatig",
+		SchemaUrl: "https://schemas.example.org/schema",
+		Hash:      "hash-1",
+		Content:   map[string]any{"type": "object"},
+	}
+	require.NoError(t, repo.SaveSchema(ctx, manual))
+
+	sourceMeta := &models.Schema{
+		Id:                   "source-meta",
+		Title:                "SourceMeta",
+		SchemaUrl:            "https://schemas.example.org/schema",
+		SourceMetaIdentifier: "https://schemas.example.org/schema",
+		SourceMetaHealth:     90,
+	}
+	require.NoError(t, repo.SaveSchema(ctx, sourceMeta))
+
+	all, err := repo.AllSchemas(ctx)
+	require.NoError(t, err)
+	require.Len(t, all, 2)
+}
+
 func TestGetSchemaByIDNotFound(t *testing.T) {
 	repo := newTestRepo(t)
 	schema, err := repo.GetSchemaByID(context.Background(), "nope")

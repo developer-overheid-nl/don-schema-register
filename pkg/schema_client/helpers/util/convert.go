@@ -28,6 +28,15 @@ func ToSchemaSummary(schema *models.Schema) models.SchemaSummary {
 		CreatedAt:     schema.CreatedAt,
 		LastCrawledAt: schema.LastCrawledAt,
 		Organisation:  orgSummary,
+
+		SourceMetaName:         schema.SourceMetaName,
+		SourceMetaIdentifier:   schema.SourceMetaIdentifier,
+		SourceMetaBytes:        schema.SourceMetaBytes,
+		SourceMetaBytesBundled: schema.SourceMetaBytesBundled,
+		SourceMetaBaseDialect:  schema.SourceMetaBaseDialect,
+		SourceMetaDialect:      schema.SourceMetaDialect,
+		SourceMetaHealth:       schema.SourceMetaHealth,
+		SourceMetaDependencies: schema.SourceMetaDependencies,
 	}
 }
 

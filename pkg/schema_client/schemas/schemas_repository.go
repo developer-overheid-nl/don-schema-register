@@ -52,7 +52,18 @@ func (r *schemasRepository) SaveSchema(ctx context.Context, schema *models.Schem
 		}
 	}
 
-	if !found && schema.SchemaUrl != "" {
+	if !found && schema.SourceMetaIdentifier != "" {
+		err := r.db.WithContext(ctx).Where("source_meta_identifier = ?", schema.SourceMetaIdentifier).First(&existing).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if err == nil {
+			log.Printf("SaveSchema: found existing schema for SourceMeta identifier %q with id %s", schema.SourceMetaIdentifier, existing.Id)
+			found = true
+		}
+	}
+
+	if !found && schema.SourceMetaIdentifier == "" && schema.SchemaUrl != "" {
 		err := r.db.WithContext(ctx).Where("schema_url = ?", schema.SchemaUrl).First(&existing).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err

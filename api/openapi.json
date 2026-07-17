@@ -654,6 +654,39 @@
           },
           "lastCrawledAt": {
             "$ref": "#/components/schemas/LastCrawledAt"
+          },
+          "sourceMetaName": {
+            "type": "string",
+            "description": "Name reported by the SourceMeta One API entry"
+          },
+          "sourceMetaIdentifier": {
+            "type": "string",
+            "format": "uri",
+            "description": "Identifier reported by the SourceMeta One API entry"
+          },
+          "sourceMetaBytes": {
+            "type": "integer",
+            "description": "Original schema size in bytes reported by SourceMeta"
+          },
+          "sourceMetaBytesBundled": {
+            "type": "integer",
+            "description": "Bundled schema size in bytes reported by SourceMeta"
+          },
+          "sourceMetaBaseDialect": {
+            "type": "string",
+            "description": "Base dialect reported by SourceMeta"
+          },
+          "sourceMetaDialect": {
+            "type": "string",
+            "description": "Dialect reported by SourceMeta"
+          },
+          "sourceMetaHealth": {
+            "type": "integer",
+            "description": "Health score reported by SourceMeta"
+          },
+          "sourceMetaDependencies": {
+            "type": "integer",
+            "description": "Number of dependencies reported by SourceMeta"
           }
         },
         "required": [

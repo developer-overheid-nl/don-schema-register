@@ -5,17 +5,40 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/models"
 )
 
 type fakeRefresher struct {
-	count  int
-	err    error
-	called int
+	count          int
+	err            error
+	called         int
+	harvestCount   int
+	harvestErr     error
+	harvestCalled  int
+	harvestEntries []models.SourceMetaSchemaMetadata
 }
 
 func (f *fakeRefresher) RefreshChangedSchemas(ctx context.Context) (int, error) {
 	f.called++
 	return f.count, f.err
+}
+
+func (f *fakeRefresher) HarvestSourceMetaSchemas(ctx context.Context, entries []models.SourceMetaSchemaMetadata) (int, error) {
+	f.harvestCalled++
+	f.harvestEntries = entries
+	return f.harvestCount, f.harvestErr
+}
+
+type fakeSourceMetaHarvester struct {
+	entries []models.SourceMetaSchemaMetadata
+	err     error
+	called  int
+}
+
+func (f *fakeSourceMetaHarvester) Harvest(ctx context.Context) ([]models.SourceMetaSchemaMetadata, error) {
+	f.called++
+	return f.entries, f.err
 }
 
 func TestNewSchemaRefreshJobNilRefresher(t *testing.T) {
@@ -47,6 +70,31 @@ func TestSchemaRefreshJobRunOnceHandlesError(t *testing.T) {
 
 	if refresher.called != 1 {
 		t.Fatalf("called = %d, want 1", refresher.called)
+	}
+}
+
+func TestSchemaRefreshJobRunOnceHarvestsSourceMeta(t *testing.T) {
+	refresher := &fakeRefresher{harvestCount: 1}
+	harvester := &fakeSourceMetaHarvester{
+		entries: []models.SourceMetaSchemaMetadata{{Name: "crs", Identifier: "https://schemas.example.org/crs"}},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	job := &SchemaRefreshJob{refresher: refresher, sourceMetaHarvester: harvester, ctx: ctx}
+	job.runOnce()
+
+	if harvester.called != 1 {
+		t.Fatalf("harvester called = %d, want 1", harvester.called)
+	}
+	if refresher.harvestCalled != 1 {
+		t.Fatalf("harvest called = %d, want 1", refresher.harvestCalled)
+	}
+	if got := refresher.harvestEntries[0].Identifier; got != "https://schemas.example.org/crs" {
+		t.Fatalf("identifier = %q, want SourceMeta entry forwarded", got)
+	}
+	if refresher.called != 1 {
+		t.Fatalf("refresh called = %d, want 1", refresher.called)
 	}
 }
 

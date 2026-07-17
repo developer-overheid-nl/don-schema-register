@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -241,6 +243,9 @@ func (s *SchemaService) RefreshChangedSchemas(ctx context.Context) (int, error) 
 		if schemaURL == "" {
 			continue
 		}
+		if strings.TrimSpace(candidate.SourceMetaIdentifier) != "" {
+			continue
+		}
 
 		res, err := jsonschema.FetchParseValidateAndHash(ctx, jsonschema.SchemaInput{
 			SchemaUrl: schemaURL,
@@ -271,6 +276,59 @@ func (s *SchemaService) RefreshChangedSchemas(ctx context.Context) (int, error) 
 		updated++
 	}
 	return updated, nil
+}
+
+func (s *SchemaService) HarvestSourceMetaSchemas(ctx context.Context, entries []models.SourceMetaSchemaMetadata) (int, error) {
+	var stored int
+	now := time.Now()
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return stored, err
+		}
+
+		identifier := strings.TrimSpace(entry.Identifier)
+		if identifier == "" {
+			continue
+		}
+
+		schema := &models.Schema{
+			Id:                     sourceMetaSchemaID(identifier),
+			SchemaUrl:              identifier,
+			Title:                  strings.TrimSpace(entry.Name),
+			Description:            strings.TrimSpace(entry.Description),
+			Dialect:                jsonschema.NormalizeDialect(entry.Dialect),
+			SourceMetaName:         strings.TrimSpace(entry.Name),
+			SourceMetaIdentifier:   identifier,
+			SourceMetaBytes:        entry.Bytes,
+			SourceMetaBytesBundled: entry.BytesBundled,
+			SourceMetaBaseDialect:  strings.TrimSpace(entry.BaseDialect),
+			SourceMetaDialect:      strings.TrimSpace(entry.Dialect),
+			SourceMetaHealth:       entry.Health,
+			SourceMetaDependencies: entry.Dependencies,
+			LastCrawledAt:          now,
+		}
+		if schema.Title == "" {
+			schema.Title = identifier
+		}
+		if schema.Dialect == "unknown" && strings.TrimSpace(entry.BaseDialect) != "" {
+			schema.Dialect = jsonschema.NormalizeDialect(entry.BaseDialect)
+		}
+
+		if err := s.repo.SaveSchema(ctx, schema); err != nil {
+			return stored, err
+		}
+
+		schemaCopy := *schema
+		go s.publishToTypesense(schemaCopy)
+		stored++
+	}
+
+	return stored, nil
+}
+
+func sourceMetaSchemaID(identifier string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(identifier)))
+	return "source-meta-" + hex.EncodeToString(sum[:])[:16]
 }
 
 func (s *SchemaService) ListOrganisations(ctx context.Context, p *models.ListOrganisationsParams) ([]models.OrganisationSummary, models.Pagination, error) {

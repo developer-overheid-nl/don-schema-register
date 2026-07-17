@@ -146,6 +146,45 @@ func TestCreateSchemaFromInputWithBody(t *testing.T) {
 	require.NotEmpty(t, created.Id)
 }
 
+func TestHarvestSourceMetaSchemasStoresMetadata(t *testing.T) {
+	svc, repo := newTestService(t)
+	ctx := context.Background()
+
+	count, err := svc.HarvestSourceMetaSchemas(ctx, []models.SourceMetaSchemaMetadata{
+		{
+			Name:         "crs",
+			Identifier:   "https://schemas.example.org/api-register/crs",
+			Bytes:        2240,
+			BytesBundled: 2240,
+			BaseDialect:  "https://json-schema.org/draft/2020-12/schema",
+			Dialect:      "https://json-schema.org/draft/2020-12/schema",
+			Health:       82,
+			Dependencies: 0,
+			Description:  "Coordinate reference system.",
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+
+	all, err := repo.AllSchemas(ctx)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+
+	schema := all[0]
+	require.Equal(t, "crs", schema.Title)
+	require.Equal(t, "Coordinate reference system.", schema.Description)
+	require.Equal(t, "2020-12", schema.Dialect)
+	require.Equal(t, "https://schemas.example.org/api-register/crs", schema.SchemaUrl)
+	require.Equal(t, "crs", schema.SourceMetaName)
+	require.Equal(t, "https://schemas.example.org/api-register/crs", schema.SourceMetaIdentifier)
+	require.Equal(t, 2240, schema.SourceMetaBytes)
+	require.Equal(t, 2240, schema.SourceMetaBytesBundled)
+	require.Equal(t, "https://json-schema.org/draft/2020-12/schema", schema.SourceMetaBaseDialect)
+	require.Equal(t, "https://json-schema.org/draft/2020-12/schema", schema.SourceMetaDialect)
+	require.Equal(t, 82, schema.SourceMetaHealth)
+	require.Equal(t, 0, schema.SourceMetaDependencies)
+}
+
 func TestCreateSchemaFromInputWithURL(t *testing.T) {
 	svc, _ := newTestService(t)
 	org := createTestOrg(t, svc)

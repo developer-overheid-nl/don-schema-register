@@ -23,18 +23,26 @@ type Contact struct {
 }
 
 type SchemaSummary struct {
-	Id             string               `json:"id" gorm:"column:id;primaryKey"`
-	SchemaUrl      string               `json:"schemaUrl,omitempty" gorm:"column:schema_url"`
-	Title          string               `json:"title,omitempty" gorm:"column:title"`
-	Description    string               `json:"description,omitempty" gorm:"column:description"`
-	Dialect        string               `json:"dialect,omitempty" gorm:"column:dialect"`
-	RootType       string               `json:"rootType,omitempty" gorm:"column:root_type"`
-	Collection     string               `json:"collection,omitempty" gorm:"column:collection"`
-	Contact        Contact              `json:"contact" gorm:"-"`
-	Organisation   *OrganisationSummary `json:"organisation,omitempty" gorm:"foreignKey:OrganisationID;references:Uri"`
-	OrganisationID *string              `json:"-" gorm:"column:organisation_id"`
-	CreatedAt      time.Time            `json:"createdAt" gorm:"column:created_at"`
-	LastCrawledAt  time.Time            `json:"lastCrawledAt" gorm:"column:last_crawled_at"`
+	Id                     string               `json:"id" gorm:"column:id;primaryKey"`
+	SchemaUrl              string               `json:"schemaUrl,omitempty" gorm:"column:schema_url"`
+	Title                  string               `json:"title,omitempty" gorm:"column:title"`
+	Description            string               `json:"description,omitempty" gorm:"column:description"`
+	Dialect                string               `json:"dialect,omitempty" gorm:"column:dialect"`
+	RootType               string               `json:"rootType,omitempty" gorm:"column:root_type"`
+	Collection             string               `json:"collection,omitempty" gorm:"column:collection"`
+	Contact                Contact              `json:"contact" gorm:"-"`
+	Organisation           *OrganisationSummary `json:"organisation,omitempty" gorm:"foreignKey:OrganisationID;references:Uri"`
+	OrganisationID         *string              `json:"-" gorm:"column:organisation_id"`
+	SourceMetaName         string               `json:"sourceMetaName,omitempty" gorm:"column:source_meta_name"`
+	SourceMetaIdentifier   string               `json:"sourceMetaIdentifier,omitempty" gorm:"column:source_meta_identifier"`
+	SourceMetaBytes        int                  `json:"sourceMetaBytes,omitempty" gorm:"column:source_meta_bytes"`
+	SourceMetaBytesBundled int                  `json:"sourceMetaBytesBundled,omitempty" gorm:"column:source_meta_bytes_bundled"`
+	SourceMetaBaseDialect  string               `json:"sourceMetaBaseDialect,omitempty" gorm:"column:source_meta_base_dialect"`
+	SourceMetaDialect      string               `json:"sourceMetaDialect,omitempty" gorm:"column:source_meta_dialect"`
+	SourceMetaHealth       int                  `json:"sourceMetaHealth,omitempty" gorm:"column:source_meta_health"`
+	SourceMetaDependencies int                  `json:"sourceMetaDependencies,omitempty" gorm:"column:source_meta_dependencies"`
+	CreatedAt              time.Time            `json:"createdAt" gorm:"column:created_at"`
+	LastCrawledAt          time.Time            `json:"lastCrawledAt" gorm:"column:last_crawled_at"`
 }
 
 type SchemaDetail struct {
@@ -43,22 +51,42 @@ type SchemaDetail struct {
 }
 
 type Schema struct {
-	Id             string         `json:"id" gorm:"column:id;primaryKey"`
-	SchemaUrl      string         `json:"schemaUrl,omitempty" gorm:"column:schema_url"`
-	Title          string         `json:"title" gorm:"column:title"`
-	Description    string         `json:"description,omitempty" gorm:"column:description"`
-	Dialect        string         `json:"dialect,omitempty" gorm:"column:dialect"`
-	RootType       string         `json:"rootType,omitempty" gorm:"column:root_type"`
-	Collection     string         `json:"collection,omitempty" gorm:"column:collection"`
-	ContactName    string         `json:"contact_name,omitempty" gorm:"column:contact_name"`
-	ContactUrl     string         `json:"contact_url,omitempty" gorm:"column:contact_url"`
-	ContactEmail   string         `json:"contact_email,omitempty" gorm:"column:contact_email"`
-	Organisation   *Organisation  `json:"-" gorm:"foreignKey:OrganisationID;references:Uri"`
-	OrganisationID *string        `json:"-" gorm:"column:organisation_id"`
-	Content        map[string]any `json:"content,omitempty" gorm:"column:content;serializer:json"`
-	Hash           string         `json:"-" gorm:"column:schema_hash"`
-	CreatedAt      time.Time      `json:"createdAt" gorm:"column:created_at"`
-	LastCrawledAt  time.Time      `json:"lastCrawledAt" gorm:"column:last_crawled_at"`
+	Id                     string         `json:"id" gorm:"column:id;primaryKey"`
+	SchemaUrl              string         `json:"schemaUrl,omitempty" gorm:"column:schema_url"`
+	Title                  string         `json:"title" gorm:"column:title"`
+	Description            string         `json:"description,omitempty" gorm:"column:description"`
+	Dialect                string         `json:"dialect,omitempty" gorm:"column:dialect"`
+	RootType               string         `json:"rootType,omitempty" gorm:"column:root_type"`
+	Collection             string         `json:"collection,omitempty" gorm:"column:collection"`
+	ContactName            string         `json:"contact_name,omitempty" gorm:"column:contact_name"`
+	ContactUrl             string         `json:"contact_url,omitempty" gorm:"column:contact_url"`
+	ContactEmail           string         `json:"contact_email,omitempty" gorm:"column:contact_email"`
+	Organisation           *Organisation  `json:"-" gorm:"foreignKey:OrganisationID;references:Uri"`
+	OrganisationID         *string        `json:"-" gorm:"column:organisation_id"`
+	Content                map[string]any `json:"content,omitempty" gorm:"column:content;serializer:json"`
+	Hash                   string         `json:"-" gorm:"column:schema_hash"`
+	SourceMetaName         string         `json:"sourceMetaName,omitempty" gorm:"column:source_meta_name"`
+	SourceMetaIdentifier   string         `json:"sourceMetaIdentifier,omitempty" gorm:"column:source_meta_identifier"`
+	SourceMetaBytes        int            `json:"sourceMetaBytes,omitempty" gorm:"column:source_meta_bytes"`
+	SourceMetaBytesBundled int            `json:"sourceMetaBytesBundled,omitempty" gorm:"column:source_meta_bytes_bundled"`
+	SourceMetaBaseDialect  string         `json:"sourceMetaBaseDialect,omitempty" gorm:"column:source_meta_base_dialect"`
+	SourceMetaDialect      string         `json:"sourceMetaDialect,omitempty" gorm:"column:source_meta_dialect"`
+	SourceMetaHealth       int            `json:"sourceMetaHealth,omitempty" gorm:"column:source_meta_health"`
+	SourceMetaDependencies int            `json:"sourceMetaDependencies,omitempty" gorm:"column:source_meta_dependencies"`
+	CreatedAt              time.Time      `json:"createdAt" gorm:"column:created_at"`
+	LastCrawledAt          time.Time      `json:"lastCrawledAt" gorm:"column:last_crawled_at"`
+}
+
+type SourceMetaSchemaMetadata struct {
+	Name         string `json:"name"`
+	Identifier   string `json:"identifier"`
+	Bytes        int    `json:"bytes"`
+	BytesBundled int    `json:"bytesBundled"`
+	BaseDialect  string `json:"baseDialect"`
+	Dialect      string `json:"dialect"`
+	Health       int    `json:"health"`
+	Dependencies int    `json:"dependencies"`
+	Description  string `json:"description"`
 }
 
 type SchemaPost struct {
