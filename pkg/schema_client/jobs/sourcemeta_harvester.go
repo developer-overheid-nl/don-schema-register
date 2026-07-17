@@ -110,7 +110,9 @@ func (h *SourceMetaHarvester) fetchList(ctx context.Context, listURL string) (*s
 	if err != nil {
 		return nil, fmt.Errorf("SourceMeta One API ophalen mislukt: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("SourceMeta One API gaf status %s voor %s", resp.Status, listURL)
