@@ -613,6 +613,31 @@
           "name"
         ]
       },
+      "SourceMetaDependency": {
+        "type": "object",
+        "description": "A dependency edge reported by SourceMeta for a stored schema.",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "uri",
+            "description": "The schema identifier that contains the reference"
+          },
+          "to": {
+            "type": "string",
+            "format": "uri",
+            "description": "The schema identifier being referenced"
+          },
+          "at": {
+            "type": "string",
+            "description": "JSON Pointer location of the dependency"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "at"
+        ]
+      },
       "SchemaSummary": {
         "type": "object",
         "properties": {
@@ -696,6 +721,13 @@
               "content": {
                 "type": "object",
                 "description": "The stored JSON Schema document"
+              },
+              "sourceMetaDependencyDetails": {
+                "type": "array",
+                "description": "Dependency edges reported by SourceMeta for this schema",
+                "items": {
+                  "$ref": "#/components/schemas/SourceMetaDependency"
+                }
               }
             }
           }

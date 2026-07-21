@@ -34,8 +34,9 @@ func ToSchemaSummary(schema *models.Schema) models.SchemaSummary {
 
 func ToSchemaDetail(schema *models.Schema) *models.SchemaDetail {
 	detail := &models.SchemaDetail{
-		SchemaSummary: ToSchemaSummary(schema),
-		Content:       schema.Content,
+		SchemaSummary:               ToSchemaSummary(schema),
+		Content:                     schema.Content,
+		SourceMetaDependencyDetails: append([]models.SourceMetaDependency(nil), schema.SourceMetaDependencyDetails...),
 	}
 	return detail
 }

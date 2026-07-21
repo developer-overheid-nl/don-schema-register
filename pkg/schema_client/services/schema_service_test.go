@@ -161,9 +161,16 @@ func TestHarvestSourceMetaSchemasStoresMetadata(t *testing.T) {
 			BaseDialect:  "https://json-schema.org/draft/2020-12/schema",
 			Dialect:      "https://json-schema.org/draft/2020-12/schema",
 			Health:       82,
-			Dependencies: 0,
-			Description:  "Coordinate reference system.",
-			RawContent:   sourceMetaTestSchema,
+			Dependencies: 1,
+			DependencyDetails: []models.SourceMetaDependency{
+				{
+					From: "https://schemas.example.org/api-register/crs",
+					To:   "https://schemas.example.org/api-register/_shared/link",
+					At:   "/properties/links/items/$ref",
+				},
+			},
+			Description: "Coordinate reference system.",
+			RawContent:  sourceMetaTestSchema,
 		},
 	})
 	require.NoError(t, err)
@@ -188,7 +195,14 @@ func TestHarvestSourceMetaSchemasStoresMetadata(t *testing.T) {
 	require.Equal(t, "https://json-schema.org/draft/2020-12/schema", schema.SourceMetaBaseDialect)
 	require.Equal(t, "https://json-schema.org/draft/2020-12/schema", schema.SourceMetaDialect)
 	require.Equal(t, 82, schema.SourceMetaHealth)
-	require.Equal(t, 0, schema.SourceMetaDependencies)
+	require.Equal(t, 1, schema.SourceMetaDependencies)
+	require.Equal(t, []models.SourceMetaDependency{
+		{
+			From: "https://schemas.example.org/api-register/crs",
+			To:   "https://schemas.example.org/api-register/_shared/link",
+			At:   "/properties/links/items/$ref",
+		},
+	}, schema.SourceMetaDependencyDetails)
 }
 
 func TestHarvestSourceMetaSchemasUsesOpaqueID(t *testing.T) {

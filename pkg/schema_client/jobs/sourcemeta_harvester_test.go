@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/models"
 )
 
 func TestSourceMetaListURLPreservesSchemasBase(t *testing.T) {
@@ -50,6 +52,16 @@ func TestSourceMetaDirectoryURLDoesNotDuplicateSchemasBase(t *testing.T) {
 	}
 }
 
+func TestSourceMetaDependenciesURLDoesNotDuplicateSchemasBase(t *testing.T) {
+	got, err := sourceMetaDependenciesURL("https://source-meta.internal/schemas/", "/schemas/api-register/crs")
+	if err != nil {
+		t.Fatalf("sourceMetaDependenciesURL() error = %v", err)
+	}
+	if want := "https://source-meta.internal/schemas/self/v1/api/schemas/dependencies/api-register/crs"; got != want {
+		t.Fatalf("sourceMetaDependenciesURL() = %q, want %q", got, want)
+	}
+}
+
 func TestSourceMetaHarvesterCrawlsDirectoriesAndMapsSchemaMetadata(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/schemas/self/v1/api/list", func(w http.ResponseWriter, _ *http.Request) {
@@ -76,7 +88,7 @@ func TestSourceMetaHarvesterCrawlsDirectoriesAndMapsSchemaMetadata(t *testing.T)
 					BaseDialect:  "https://json-schema.org/draft/2020-12/schema",
 					Dialect:      "https://json-schema.org/draft/2020-12/schema",
 					Health:       82,
-					Dependencies: 0,
+					Dependencies: 1,
 					Description:  "Coordinate reference system.",
 				},
 			},
@@ -85,6 +97,15 @@ func TestSourceMetaHarvesterCrawlsDirectoriesAndMapsSchemaMetadata(t *testing.T)
 	mux.HandleFunc("/schemas/api-register/crs", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/schema+json")
 		_, _ = w.Write([]byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"CRS","description":"Schema description.","type":"object"}`))
+	})
+	mux.HandleFunc("/schemas/self/v1/api/schemas/dependencies/api-register/crs", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(t, w, []models.SourceMetaDependency{
+			{
+				From: "https://schemas.example.org/api-register/crs",
+				To:   "https://schemas.example.org/api-register/_shared/link",
+				At:   "/properties/links/items/$ref",
+			},
+		})
 	})
 	server := httptest.NewServer(mux)
 	defer server.Close()
@@ -124,8 +145,14 @@ func TestSourceMetaHarvesterCrawlsDirectoriesAndMapsSchemaMetadata(t *testing.T)
 	if entry.Health != 82 {
 		t.Fatalf("Health = %d", entry.Health)
 	}
-	if entry.Dependencies != 0 {
+	if entry.Dependencies != 1 {
 		t.Fatalf("Dependencies = %d", entry.Dependencies)
+	}
+	if len(entry.DependencyDetails) != 1 {
+		t.Fatalf("DependencyDetails = %#v, want one dependency", entry.DependencyDetails)
+	}
+	if entry.DependencyDetails[0].To != "https://schemas.example.org/api-register/_shared/link" {
+		t.Fatalf("DependencyDetails[0].To = %q", entry.DependencyDetails[0].To)
 	}
 	if entry.Description != "Coordinate reference system." {
 		t.Fatalf("Description = %q", entry.Description)

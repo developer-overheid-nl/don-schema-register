@@ -25,8 +25,15 @@ func TestToSchemaSummaryAndDetail(t *testing.T) {
 		OrganisationID: &orgURI,
 		Organisation:   &models.Organisation{Uri: orgURI, Label: "Example Org"},
 		Content:        map[string]any{"type": "object"},
-		CreatedAt:      createdAt,
-		LastCrawledAt:  lastCrawledAt,
+		SourceMetaDependencyDetails: []models.SourceMetaDependency{
+			{
+				From: "https://schemas.example.org/schema",
+				To:   "https://schemas.example.org/shared/link",
+				At:   "/properties/links/items/$ref",
+			},
+		},
+		CreatedAt:     createdAt,
+		LastCrawledAt: lastCrawledAt,
 	}
 
 	summary := ToSchemaSummary(schema)
@@ -49,6 +56,12 @@ func TestToSchemaSummaryAndDetail(t *testing.T) {
 	}
 	if detail.Content["type"] != "object" {
 		t.Fatalf("detail content = %#v, want schema content", detail.Content)
+	}
+	if len(detail.SourceMetaDependencyDetails) != 1 {
+		t.Fatalf("detail SourceMetaDependencyDetails = %#v, want one dependency", detail.SourceMetaDependencyDetails)
+	}
+	if detail.SourceMetaDependencyDetails[0].To != "https://schemas.example.org/shared/link" {
+		t.Fatalf("detail SourceMetaDependencyDetails[0].To = %q", detail.SourceMetaDependencyDetails[0].To)
 	}
 }
 
