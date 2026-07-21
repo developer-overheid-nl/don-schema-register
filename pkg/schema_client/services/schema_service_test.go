@@ -150,7 +150,6 @@ func TestCreateSchemaFromInputWithBody(t *testing.T) {
 func TestHarvestSourceMetaSchemasStoresMetadata(t *testing.T) {
 	svc, repo := newTestService(t)
 	ctx := context.Background()
-	t.Setenv("SCHEMA_REGISTER_PUBLIC_BASE_URL", "https://api.example.org/schema-register")
 
 	count, err := svc.HarvestSourceMetaSchemas(ctx, []models.SourceMetaSchemaMetadata{
 		{
@@ -179,7 +178,7 @@ func TestHarvestSourceMetaSchemasStoresMetadata(t *testing.T) {
 	require.Equal(t, "Schema description.", schema.Description)
 	require.Equal(t, "2020-12", schema.Dialect)
 	require.Equal(t, "object", schema.RootType)
-	require.Equal(t, "https://api.example.org/schema-register/v1/schemas/"+schema.Id+"/schema.json", schema.SchemaUrl)
+	require.Equal(t, "https://api.don.projects.digilab.network/schema-register/v1/schemas/"+schema.Id+"/schema.json", schema.SchemaUrl)
 	require.NotEmpty(t, schema.Hash)
 	require.Equal(t, "object", schema.Content["type"])
 	require.Equal(t, "crs", schema.SourceMetaName)

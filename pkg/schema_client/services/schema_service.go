@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -25,7 +24,7 @@ import (
 // fetchOrigin wordt als Origin-header meegestuurd bij het ophalen van schemas.
 const fetchOrigin = "https://developer.overheid.nl"
 
-const defaultSchemaRegisterPublicBaseURL = "https://api.don.projects.digilab.network/schema-register"
+const schemaRegisterArtifactBaseURL = "https://api.don.projects.digilab.network/schema-register"
 
 // ErrNeedsPost geeft aan dat een PUT verwijst naar een schema dat (nog) niet
 // bestaat en via POST geregistreerd moet worden.
@@ -343,11 +342,7 @@ func sourceMetaSchemaID(identifier string) string {
 }
 
 func sourceMetaSchemaArtifactURL(id string) string {
-	base := strings.TrimRight(strings.TrimSpace(os.Getenv("SCHEMA_REGISTER_PUBLIC_BASE_URL")), "/")
-	if base == "" {
-		base = defaultSchemaRegisterPublicBaseURL
-	}
-	return base + "/v1/schemas/" + url.PathEscape(id) + "/schema.json"
+	return schemaRegisterArtifactBaseURL + "/v1/schemas/" + url.PathEscape(id) + "/schema.json"
 }
 
 func contentStringWithFallback(content map[string]any, key string, fallbacks ...string) string {
