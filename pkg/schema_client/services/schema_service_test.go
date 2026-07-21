@@ -185,6 +185,51 @@ func TestHarvestSourceMetaSchemasStoresMetadata(t *testing.T) {
 	require.Equal(t, 0, schema.SourceMetaDependencies)
 }
 
+func TestHarvestSourceMetaSchemasUsesOpaqueID(t *testing.T) {
+	svc, repo := newTestService(t)
+	ctx := context.Background()
+
+	_, err := svc.HarvestSourceMetaSchemas(ctx, []models.SourceMetaSchemaMetadata{
+		{
+			Name:       "crs",
+			Identifier: "https://schemas.example.org/api-register/crs",
+		},
+	})
+	require.NoError(t, err)
+
+	all, err := repo.AllSchemas(ctx)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	require.NotEmpty(t, all[0].Id)
+	require.NotContains(t, all[0].Id, "source-meta")
+}
+
+func TestHarvestSourceMetaSchemasMigratesLegacySourceMetaID(t *testing.T) {
+	svc, repo := newTestService(t)
+	ctx := context.Background()
+
+	require.NoError(t, repo.SaveSchema(ctx, &models.Schema{
+		Id:                   "source-meta-06aaddfcede69a1f",
+		Title:                "Legacy",
+		SourceMetaIdentifier: "https://schemas.example.org/api-register/crs",
+	}))
+
+	_, err := svc.HarvestSourceMetaSchemas(ctx, []models.SourceMetaSchemaMetadata{
+		{
+			Name:       "crs",
+			Identifier: "https://schemas.example.org/api-register/crs",
+		},
+	})
+	require.NoError(t, err)
+
+	all, err := repo.AllSchemas(ctx)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	require.NotEqual(t, "source-meta-06aaddfcede69a1f", all[0].Id)
+	require.NotContains(t, all[0].Id, "source-meta")
+	require.Equal(t, "crs", all[0].Title)
+}
+
 func TestCreateSchemaFromInputWithURL(t *testing.T) {
 	svc, _ := newTestService(t)
 	org := createTestOrg(t, svc)

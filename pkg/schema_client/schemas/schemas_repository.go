@@ -86,6 +86,24 @@ func (r *schemasRepository) SaveSchema(ctx context.Context, schema *models.Schem
 	}
 
 	if found {
+		if schema.SourceMetaIdentifier != "" &&
+			strings.HasPrefix(existing.Id, "source-meta-") &&
+			schema.Id != "" &&
+			schema.Id != existing.Id {
+			if schema.CreatedAt.IsZero() {
+				schema.CreatedAt = existing.CreatedAt
+			}
+			if schema.OrganisationID == nil {
+				schema.OrganisationID = existing.OrganisationID
+			}
+			return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+				if err := tx.Delete(&existing).Error; err != nil {
+					return err
+				}
+				return tx.Create(schema).Error
+			})
+		}
+
 		schema.Id = existing.Id
 		if schema.CreatedAt.IsZero() {
 			schema.CreatedAt = existing.CreatedAt

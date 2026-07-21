@@ -239,6 +239,32 @@ func TestSaveSchemaIdempotentOnSourceMetaIdentifier(t *testing.T) {
 	require.Equal(t, 90, all[0].SourceMetaHealth)
 }
 
+func TestSaveSchemaMigratesLegacySourceMetaID(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	first := &models.Schema{
+		Id:                   "source-meta-06aaddfcede69a1f",
+		Title:                "Legacy",
+		SourceMetaIdentifier: "https://schemas.example.org/schema",
+	}
+	require.NoError(t, repo.SaveSchema(ctx, first))
+
+	second := &models.Schema{
+		Id:                   "opaque-id",
+		Title:                "Nieuwe ID",
+		SourceMetaIdentifier: "https://schemas.example.org/schema",
+	}
+	require.NoError(t, repo.SaveSchema(ctx, second))
+	require.Equal(t, "opaque-id", second.Id)
+
+	all, err := repo.AllSchemas(ctx)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	require.Equal(t, "opaque-id", all[0].Id)
+	require.Equal(t, "Nieuwe ID", all[0].Title)
+}
+
 func TestSaveSourceMetaSchemaDoesNotOverwriteManualSchemaByURL(t *testing.T) {
 	repo := newTestRepo(t)
 	ctx := context.Background()

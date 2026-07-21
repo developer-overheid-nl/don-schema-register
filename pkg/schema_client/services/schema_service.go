@@ -2,8 +2,6 @@ package services
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -20,6 +18,7 @@ import (
 	util "github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/helpers/util"
 	"github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/models"
 	"github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/schemas"
+	"github.com/teris-io/shortid"
 )
 
 // fetchOrigin wordt als Origin-header meegestuurd bij het ophalen van schemas.
@@ -327,8 +326,7 @@ func (s *SchemaService) HarvestSourceMetaSchemas(ctx context.Context, entries []
 }
 
 func sourceMetaSchemaID(identifier string) string {
-	sum := sha256.Sum256([]byte(strings.TrimSpace(identifier)))
-	return "source-meta-" + hex.EncodeToString(sum[:])[:16]
+	return shortid.MustGenerate()
 }
 
 func (s *SchemaService) ListOrganisations(ctx context.Context, p *models.ListOrganisationsParams) ([]models.OrganisationSummary, models.Pagination, error) {
