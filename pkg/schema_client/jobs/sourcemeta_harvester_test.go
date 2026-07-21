@@ -8,39 +8,31 @@ import (
 	"testing"
 )
 
-func TestSourceMetaListURLFromRoot(t *testing.T) {
-	got, err := sourceMetaListURL("https://source-meta.internal/")
+func TestSourceMetaListURLPreservesSchemasBase(t *testing.T) {
+	got, err := sourceMetaListURL("https://source-meta.internal/schemas/")
 	if err != nil {
 		t.Fatalf("sourceMetaListURL() error = %v", err)
 	}
 
-	want := "https://source-meta.internal/self/v1/api/list"
+	want := "https://source-meta.internal/schemas/self/v1/api/list"
 	if got != want {
 		t.Fatalf("sourceMetaListURL() = %q, want %q", got, want)
 	}
 }
 
-func TestSourceMetaURLsIgnoreLegacySchemasSuffix(t *testing.T) {
-	got, err := sourceMetaListURL("https://source-meta.internal/schemas/")
-	if err != nil {
-		t.Fatalf("sourceMetaListURL() error = %v", err)
-	}
-	if want := "https://source-meta.internal/self/v1/api/list"; got != want {
-		t.Fatalf("sourceMetaListURL() = %q, want %q", got, want)
-	}
-
-	got, err = sourceMetaSchemaURL("https://source-meta.internal/schemas/", "/api-register/crs")
+func TestSourceMetaSchemaURLPreservesSchemasBase(t *testing.T) {
+	got, err := sourceMetaSchemaURL("https://source-meta.internal/schemas/", "/api-register/crs")
 	if err != nil {
 		t.Fatalf("sourceMetaSchemaURL() error = %v", err)
 	}
-	if want := "https://source-meta.internal/api-register/crs"; got != want {
+	if want := "https://source-meta.internal/schemas/api-register/crs"; got != want {
 		t.Fatalf("sourceMetaSchemaURL() = %q, want %q", got, want)
 	}
 }
 
 func TestSourceMetaHarvesterCrawlsDirectoriesAndMapsSchemaMetadata(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/self/v1/api/list", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/schemas/self/v1/api/list", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(t, w, sourceMetaListResponse{
 			Entries: []sourceMetaEntry{
 				{
@@ -51,7 +43,7 @@ func TestSourceMetaHarvesterCrawlsDirectoriesAndMapsSchemaMetadata(t *testing.T)
 			},
 		})
 	})
-	mux.HandleFunc("/self/v1/api/list/api-register/", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/schemas/self/v1/api/list/api-register/", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(t, w, sourceMetaListResponse{
 			Entries: []sourceMetaEntry{
 				{
@@ -70,14 +62,14 @@ func TestSourceMetaHarvesterCrawlsDirectoriesAndMapsSchemaMetadata(t *testing.T)
 			},
 		})
 	})
-	mux.HandleFunc("/api-register/crs", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/schemas/api-register/crs", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/schema+json")
 		_, _ = w.Write([]byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"CRS","description":"Schema description.","type":"object"}`))
 	})
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	harvester := NewSourceMetaHarvester(server.URL+"/", server.Client())
+	harvester := NewSourceMetaHarvester(server.URL+"/schemas/", server.Client())
 	entries, err := harvester.Harvest(context.Background())
 	if err != nil {
 		t.Fatalf("Harvest() error = %v", err)
