@@ -282,6 +282,7 @@ func (s *SchemaService) RefreshChangedSchemas(ctx context.Context) (int, error) 
 func (s *SchemaService) HarvestSourceMetaSchemas(ctx context.Context, entries []models.SourceMetaSchemaMetadata) (int, error) {
 	var stored int
 	now := time.Now()
+	storedSchemas := make([]*models.Schema, 0, len(entries))
 	for _, entry := range entries {
 		if err := ctx.Err(); err != nil {
 			return stored, err
@@ -336,12 +337,110 @@ func (s *SchemaService) HarvestSourceMetaSchemas(ctx context.Context, entries []
 			}
 		}
 
-		schemaCopy := *schema
-		go s.publishToTypesense(schemaCopy)
+		storedSchemas = append(storedSchemas, schema)
 		stored++
 	}
 
+	if err := s.enrichSourceMetaDependencyDetails(ctx, storedSchemas); err != nil {
+		return stored, err
+	}
+	for _, schema := range storedSchemas {
+		schemaCopy := *schema
+		go s.publishToTypesense(schemaCopy)
+	}
+
 	return stored, nil
+}
+
+func (s *SchemaService) enrichSourceMetaDependencyDetails(ctx context.Context, schemas []*models.Schema) error {
+	if len(schemas) == 0 {
+		return nil
+	}
+
+	allSchemas, err := s.repo.AllSchemas(ctx)
+	if err != nil {
+		return err
+	}
+	bySourceMetaIdentifier := make(map[string]models.Schema, len(allSchemas))
+	for _, schema := range allSchemas {
+		if identifier := strings.TrimSpace(schema.SourceMetaIdentifier); identifier != "" {
+			bySourceMetaIdentifier[identifier] = schema
+		}
+	}
+
+	for _, schema := range schemas {
+		if len(schema.SourceMetaDependencyDetails) == 0 {
+			continue
+		}
+		enriched, changed := enrichSourceMetaDependencies(schema.SourceMetaDependencyDetails, bySourceMetaIdentifier)
+		if !changed {
+			continue
+		}
+		schema.SourceMetaDependencyDetails = enriched
+		if err := s.repo.SaveSchema(ctx, schema); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func enrichSourceMetaDependencies(
+	dependencies []models.SourceMetaDependency,
+	bySourceMetaIdentifier map[string]models.Schema,
+) ([]models.SourceMetaDependency, bool) {
+	enriched := make([]models.SourceMetaDependency, len(dependencies))
+	changed := false
+	for i, dependency := range dependencies {
+		next := dependency
+
+		fromSchema, hasFromSchema := bySourceMetaIdentifier[strings.TrimSpace(dependency.From)]
+		var dependencyChanged bool
+		next, dependencyChanged = withSourceMetaDependencySchema(next, "from", fromSchema, hasFromSchema)
+		changed = dependencyChanged || changed
+
+		toSchema, hasToSchema := bySourceMetaIdentifier[strings.TrimSpace(dependency.To)]
+		next, dependencyChanged = withSourceMetaDependencySchema(next, "to", toSchema, hasToSchema)
+		changed = dependencyChanged || changed
+
+		enriched[i] = next
+	}
+	return enriched, changed
+}
+
+func withSourceMetaDependencySchema(
+	dependency models.SourceMetaDependency,
+	direction string,
+	schema models.Schema,
+	found bool,
+) (models.SourceMetaDependency, bool) {
+	id, schemaURL, title := "", "", ""
+	if found {
+		id = schema.Id
+		schemaURL = schema.SchemaUrl
+		title = schema.Title
+	}
+
+	switch direction {
+	case "from":
+		changed := dependency.FromSchemaId != id ||
+			dependency.FromSchemaUrl != schemaURL ||
+			dependency.FromSchemaTitle != title
+		dependency.FromSchemaId = id
+		dependency.FromSchemaUrl = schemaURL
+		dependency.FromSchemaTitle = title
+		return dependency, changed
+	case "to":
+		changed := dependency.ToSchemaId != id ||
+			dependency.ToSchemaUrl != schemaURL ||
+			dependency.ToSchemaTitle != title
+		dependency.ToSchemaId = id
+		dependency.ToSchemaUrl = schemaURL
+		dependency.ToSchemaTitle = title
+		return dependency, changed
+	default:
+		return dependency, false
+	}
 }
 
 func sourceMetaSchemaID(identifier string) string {

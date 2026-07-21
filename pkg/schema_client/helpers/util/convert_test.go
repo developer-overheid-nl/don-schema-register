@@ -27,9 +27,15 @@ func TestToSchemaSummaryAndDetail(t *testing.T) {
 		Content:        map[string]any{"type": "object"},
 		SourceMetaDependencyDetails: []models.SourceMetaDependency{
 			{
-				From: "https://schemas.example.org/schema",
-				To:   "https://schemas.example.org/shared/link",
-				At:   "/properties/links/items/$ref",
+				From:            "https://schemas.example.org/schema",
+				To:              "https://schemas.example.org/shared/link",
+				At:              "/properties/links/items/$ref",
+				FromSchemaId:    "schema-1",
+				FromSchemaUrl:   "https://api.example.org/schemas/schema-1/schema.json",
+				FromSchemaTitle: "Bier",
+				ToSchemaId:      "schema-2",
+				ToSchemaUrl:     "https://api.example.org/schemas/schema-2/schema.json",
+				ToSchemaTitle:   "Link",
 			},
 		},
 		CreatedAt:     createdAt,
@@ -62,6 +68,9 @@ func TestToSchemaSummaryAndDetail(t *testing.T) {
 	}
 	if detail.SourceMetaDependencyDetails[0].To != "https://schemas.example.org/shared/link" {
 		t.Fatalf("detail SourceMetaDependencyDetails[0].To = %q", detail.SourceMetaDependencyDetails[0].To)
+	}
+	if detail.SourceMetaDependencyDetails[0].ToSchemaId != "schema-2" {
+		t.Fatalf("detail SourceMetaDependencyDetails[0].ToSchemaId = %q", detail.SourceMetaDependencyDetails[0].ToSchemaId)
 	}
 }
 

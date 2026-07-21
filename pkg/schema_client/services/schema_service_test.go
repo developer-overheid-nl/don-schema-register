@@ -172,15 +172,32 @@ func TestHarvestSourceMetaSchemasStoresMetadata(t *testing.T) {
 			Description: "Coordinate reference system.",
 			RawContent:  sourceMetaTestSchema,
 		},
+		{
+			Name:       "link",
+			Path:       "/api-register/_shared/link",
+			Identifier: "https://schemas.example.org/api-register/_shared/link",
+			RawContent: []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"Link","type":"object"}`),
+		},
 	})
 	require.NoError(t, err)
-	require.Equal(t, 1, count)
+	require.Equal(t, 2, count)
 
 	all, err := repo.AllSchemas(ctx)
 	require.NoError(t, err)
-	require.Len(t, all, 1)
+	require.Len(t, all, 2)
 
-	schema := all[0]
+	var schema, dependencyTarget models.Schema
+	for _, candidate := range all {
+		switch candidate.SourceMetaIdentifier {
+		case "https://schemas.example.org/api-register/crs":
+			schema = candidate
+		case "https://schemas.example.org/api-register/_shared/link":
+			dependencyTarget = candidate
+		}
+	}
+	require.NotEmpty(t, schema.Id)
+	require.NotEmpty(t, dependencyTarget.Id)
+
 	require.Equal(t, "CRS", schema.Title)
 	require.Equal(t, "Schema description.", schema.Description)
 	require.Equal(t, "2020-12", schema.Dialect)
@@ -198,9 +215,15 @@ func TestHarvestSourceMetaSchemasStoresMetadata(t *testing.T) {
 	require.Equal(t, 1, schema.SourceMetaDependencies)
 	require.Equal(t, []models.SourceMetaDependency{
 		{
-			From: "https://schemas.example.org/api-register/crs",
-			To:   "https://schemas.example.org/api-register/_shared/link",
-			At:   "/properties/links/items/$ref",
+			From:            "https://schemas.example.org/api-register/crs",
+			To:              "https://schemas.example.org/api-register/_shared/link",
+			At:              "/properties/links/items/$ref",
+			FromSchemaId:    schema.Id,
+			FromSchemaUrl:   schema.SchemaUrl,
+			FromSchemaTitle: "CRS",
+			ToSchemaId:      dependencyTarget.Id,
+			ToSchemaUrl:     dependencyTarget.SchemaUrl,
+			ToSchemaTitle:   "Link",
 		},
 	}, schema.SourceMetaDependencyDetails)
 }

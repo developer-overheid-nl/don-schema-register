@@ -80,9 +80,15 @@ type Schema struct {
 }
 
 type SourceMetaDependency struct {
-	From string `json:"from"`
-	To   string `json:"to"`
-	At   string `json:"at"`
+	From            string `json:"from"`
+	To              string `json:"to"`
+	At              string `json:"at"`
+	FromSchemaId    string `json:"fromSchemaId,omitempty"`
+	FromSchemaUrl   string `json:"fromSchemaUrl,omitempty"`
+	FromSchemaTitle string `json:"fromSchemaTitle,omitempty"`
+	ToSchemaId      string `json:"toSchemaId,omitempty"`
+	ToSchemaUrl     string `json:"toSchemaUrl,omitempty"`
+	ToSchemaTitle   string `json:"toSchemaTitle,omitempty"`
 }
 
 type SourceMetaSchemaMetadata struct {

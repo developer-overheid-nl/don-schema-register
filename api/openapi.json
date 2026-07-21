@@ -630,6 +630,30 @@
           "at": {
             "type": "string",
             "description": "JSON Pointer location of the dependency"
+          },
+          "fromSchemaId": {
+            "$ref": "#/components/schemas/ResourceId",
+            "description": "Local schema-register id for the dependency source, when available"
+          },
+          "fromSchemaUrl": {
+            "$ref": "#/components/schemas/SchemaUrl",
+            "description": "Local schema-register artifact URL for the dependency source, when available"
+          },
+          "fromSchemaTitle": {
+            "$ref": "#/components/schemas/SchemaTitle",
+            "description": "Local schema-register title for the dependency source, when available"
+          },
+          "toSchemaId": {
+            "$ref": "#/components/schemas/ResourceId",
+            "description": "Local schema-register id for the dependency target, when available"
+          },
+          "toSchemaUrl": {
+            "$ref": "#/components/schemas/SchemaUrl",
+            "description": "Local schema-register artifact URL for the dependency target, when available"
+          },
+          "toSchemaTitle": {
+            "$ref": "#/components/schemas/SchemaTitle",
+            "description": "Local schema-register title for the dependency target, when available"
           }
         },
         "required": [
