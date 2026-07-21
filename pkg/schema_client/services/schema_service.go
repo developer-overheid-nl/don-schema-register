@@ -417,7 +417,7 @@ func withSourceMetaDependencySchema(
 	id, schemaURL, title := "", "", ""
 	if found {
 		id = schema.Id
-		schemaURL = schema.SchemaUrl
+		schemaURL = sourceMetaSchemaFrontendPath(schema.Id)
 		title = schema.Title
 	}
 
@@ -449,6 +449,10 @@ func sourceMetaSchemaID(identifier string) string {
 
 func sourceMetaSchemaArtifactURL(id string) string {
 	return schemaRegisterArtifactBaseURL + "/v1/schemas/" + url.PathEscape(id) + "/schema.json"
+}
+
+func sourceMetaSchemaFrontendPath(id string) string {
+	return "schemas/" + url.PathEscape(id)
 }
 
 func contentStringWithFallback(content map[string]any, key string, fallbacks ...string) string {

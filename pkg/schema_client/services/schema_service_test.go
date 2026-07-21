@@ -219,10 +219,10 @@ func TestHarvestSourceMetaSchemasStoresMetadata(t *testing.T) {
 			To:              "https://schemas.example.org/api-register/_shared/link",
 			At:              "/properties/links/items/$ref",
 			FromSchemaId:    schema.Id,
-			FromSchemaUrl:   schema.SchemaUrl,
+			FromSchemaUrl:   "schemas/" + schema.Id,
 			FromSchemaTitle: "CRS",
 			ToSchemaId:      dependencyTarget.Id,
-			ToSchemaUrl:     dependencyTarget.SchemaUrl,
+			ToSchemaUrl:     "schemas/" + dependencyTarget.Id,
 			ToSchemaTitle:   "Link",
 		},
 	}, schema.SourceMetaDependencyDetails)

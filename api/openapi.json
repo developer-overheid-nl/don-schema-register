@@ -636,8 +636,8 @@
             "description": "Local schema-register id for the dependency source, when available"
           },
           "fromSchemaUrl": {
-            "$ref": "#/components/schemas/SchemaUrl",
-            "description": "Local schema-register artifact URL for the dependency source, when available"
+            "type": "string",
+            "description": "Frontend path for the dependency source schema, for example schemas/{id}, when available"
           },
           "fromSchemaTitle": {
             "$ref": "#/components/schemas/SchemaTitle",
@@ -648,8 +648,8 @@
             "description": "Local schema-register id for the dependency target, when available"
           },
           "toSchemaUrl": {
-            "$ref": "#/components/schemas/SchemaUrl",
-            "description": "Local schema-register artifact URL for the dependency target, when available"
+            "type": "string",
+            "description": "Frontend path for the dependency target schema, for example schemas/{id}, when available"
           },
           "toSchemaTitle": {
             "$ref": "#/components/schemas/SchemaTitle",
