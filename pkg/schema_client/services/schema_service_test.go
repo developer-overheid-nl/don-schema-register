@@ -211,6 +211,31 @@ func TestHarvestSourceMetaSchemasUsesOpaqueID(t *testing.T) {
 	require.NotContains(t, all[0].Id, "source-meta")
 }
 
+func TestHarvestSourceMetaSchemasKeepsArtifactURLInSyncWithExistingID(t *testing.T) {
+	svc, repo := newTestService(t)
+	ctx := context.Background()
+	entry := models.SourceMetaSchemaMetadata{
+		Name:       "crs",
+		Identifier: "https://schemas.example.org/api-register/crs",
+		RawContent: sourceMetaTestSchema,
+	}
+
+	_, err := svc.HarvestSourceMetaSchemas(ctx, []models.SourceMetaSchemaMetadata{entry})
+	require.NoError(t, err)
+	all, err := repo.AllSchemas(ctx)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	firstID := all[0].Id
+
+	_, err = svc.HarvestSourceMetaSchemas(ctx, []models.SourceMetaSchemaMetadata{entry})
+	require.NoError(t, err)
+	all, err = repo.AllSchemas(ctx)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	require.Equal(t, firstID, all[0].Id)
+	require.Equal(t, "https://api.don.projects.digilab.network/schema-register/v1/schemas/"+firstID+"/schema.json", all[0].SchemaUrl)
+}
+
 func TestHarvestSourceMetaSchemasMigratesLegacySourceMetaID(t *testing.T) {
 	svc, repo := newTestService(t)
 	ctx := context.Background()

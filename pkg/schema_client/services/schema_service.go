@@ -328,6 +328,12 @@ func (s *SchemaService) HarvestSourceMetaSchemas(ctx context.Context, entries []
 		if err := s.repo.SaveSchema(ctx, schema); err != nil {
 			return stored, err
 		}
+		if expectedSchemaURL := sourceMetaSchemaArtifactURL(schema.Id); schema.SchemaUrl != expectedSchemaURL {
+			schema.SchemaUrl = expectedSchemaURL
+			if err := s.repo.SaveSchema(ctx, schema); err != nil {
+				return stored, err
+			}
+		}
 
 		schemaCopy := *schema
 		go s.publishToTypesense(schemaCopy)
