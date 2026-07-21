@@ -167,7 +167,7 @@ func TestSchemasEndpoints(t *testing.T) {
 		// gesorteerd op titel: Bier, Percentage, Samengesteld
 		require.Equal(t, "schema-object", body[0].Id)
 		require.Equal(t, "Bier", body[0].Title)
-		require.NotNil(t, body[0].Organisation)
+		require.Nil(t, body[0].Organisation)
 	})
 
 	t.Run("list schemas pagination headers", func(t *testing.T) {
@@ -193,7 +193,7 @@ func TestSchemasEndpoints(t *testing.T) {
 		require.Equal(t, "schema-object", body.Id)
 		require.Equal(t, "2020-12", body.Dialect)
 		require.Equal(t, "object", body.RootType)
-		require.NotNil(t, body.Organisation)
+		require.Nil(t, body.Organisation)
 		require.NotEmpty(t, body.Content)
 		require.Equal(t, "Bier", body.Content["title"])
 	})
@@ -240,21 +240,14 @@ func TestSchemasEndpoints(t *testing.T) {
 		require.Equal(t, "2", resp.Header.Get("Total-Count"))
 	})
 
-	t.Run("filter on organisation", func(t *testing.T) {
-		resp := env.doRequest(t, http.MethodGet, "/v1/schemas?organisation=https://example.org/organisations/other")
-		require.Equal(t, http.StatusOK, resp.StatusCode)
-		require.Equal(t, "0", resp.Header.Get("Total-Count"))
-	})
-
 	t.Run("schema filters groups", func(t *testing.T) {
 		resp := env.doRequest(t, http.MethodGet, "/v1/schemas/filters")
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		body := decodeBody[[]models.FilterGroup](t, resp)
-		require.Len(t, body, 3)
+		require.Len(t, body, 2)
 		require.Equal(t, "dialect", body[0].Key)
 		require.Equal(t, "rootType", body[1].Key)
-		require.Equal(t, "organisation", body[2].Key)
 
 		dialectValues := map[string]int{}
 		for _, opt := range body[0].Options {

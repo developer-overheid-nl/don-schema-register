@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"path"
@@ -13,7 +14,10 @@ import (
 	"github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/models"
 )
 
-const defaultSourceMetaOneAPIBase = "https://static.don.projects.digilab.network/schemas/"
+const (
+	defaultSourceMetaOneAPIBase = "http://source-meta-svc:8000/"
+	maxSourceMetaSchemaBytes    = 10 << 20 // 10 MiB
+)
 
 type SourceMetaHarvester struct {
 	baseURL    string
@@ -84,7 +88,11 @@ func (h *SourceMetaHarvester) harvestList(
 	for _, entry := range response.Entries {
 		switch entry.Type {
 		case "schema":
-			*schemas = append(*schemas, entry.toMetadata())
+			raw, err := h.fetchSchema(ctx, entry.Path)
+			if err != nil {
+				return err
+			}
+			*schemas = append(*schemas, entry.toMetadata(raw))
 		case "directory":
 			nextURL, err := sourceMetaDirectoryURL(listURL, entry.Path)
 			if err != nil {
@@ -126,9 +134,43 @@ func (h *SourceMetaHarvester) fetchList(ctx context.Context, listURL string) (*s
 	return &response, nil
 }
 
-func (e sourceMetaEntry) toMetadata() models.SourceMetaSchemaMetadata {
+func (h *SourceMetaHarvester) fetchSchema(ctx context.Context, schemaPath string) ([]byte, error) {
+	schemaURL, err := sourceMetaSchemaURL(h.baseURL, schemaPath)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, schemaURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/schema+json, application/json")
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("SourceMeta schema ophalen mislukt: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("SourceMeta schema gaf status %s voor %s", resp.Status, schemaURL)
+	}
+
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxSourceMetaSchemaBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("SourceMeta schema lezen mislukt: %w", err)
+	}
+	if len(raw) > maxSourceMetaSchemaBytes {
+		return nil, fmt.Errorf("SourceMeta schema is groter dan %d bytes: %s", maxSourceMetaSchemaBytes, schemaURL)
+	}
+	return raw, nil
+}
+
+func (e sourceMetaEntry) toMetadata(rawContent []byte) models.SourceMetaSchemaMetadata {
 	return models.SourceMetaSchemaMetadata{
 		Name:         e.Name,
+		Path:         e.Path,
 		Identifier:   e.Identifier,
 		Bytes:        e.Bytes,
 		BytesBundled: e.BytesBundled,
@@ -137,6 +179,7 @@ func (e sourceMetaEntry) toMetadata() models.SourceMetaSchemaMetadata {
 		Health:       e.Health,
 		Dependencies: e.Dependencies,
 		Description:  e.Description,
+		RawContent:   rawContent,
 	}
 }
 
@@ -162,5 +205,14 @@ func sourceMetaDirectoryURL(currentListURL, directoryPath string) (string, error
 	if strings.HasSuffix(directoryPath, "/") {
 		u.Path += "/"
 	}
+	return u.String(), nil
+}
+
+func sourceMetaSchemaURL(baseURL, schemaPath string) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return "", err
+	}
+	u.Path = path.Join(u.Path, strings.TrimPrefix(schemaPath, "/"))
 	return u.String(), nil
 }

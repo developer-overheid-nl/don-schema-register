@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -23,6 +24,8 @@ import (
 
 // fetchOrigin wordt als Origin-header meegestuurd bij het ophalen van schemas.
 const fetchOrigin = "https://developer.overheid.nl"
+
+const defaultSchemaRegisterPublicBaseURL = "https://api.don.projects.digilab.network/schema-register"
 
 // ErrNeedsPost geeft aan dat een PUT verwijst naar een schema dat (nog) niet
 // bestaat en via POST geregistreerd moet worden.
@@ -289,13 +292,26 @@ func (s *SchemaService) HarvestSourceMetaSchemas(ctx context.Context, entries []
 		if identifier == "" {
 			continue
 		}
+		if len(entry.RawContent) == 0 {
+			log.Printf("[sourcemeta] schema %q overgeslagen: inhoud ontbreekt", identifier)
+			continue
+		}
+		res, err := jsonschema.ParseValidateAndHash(entry.RawContent, "application/schema+json")
+		if err != nil {
+			log.Printf("[sourcemeta] schema %q parsen mislukt: %v", identifier, err)
+			continue
+		}
 
+		id := sourceMetaSchemaID(identifier)
 		schema := &models.Schema{
-			Id:                     sourceMetaSchemaID(identifier),
-			SchemaUrl:              identifier,
-			Title:                  strings.TrimSpace(entry.Name),
-			Description:            strings.TrimSpace(entry.Description),
-			Dialect:                jsonschema.NormalizeDialect(entry.Dialect),
+			Id:                     id,
+			SchemaUrl:              sourceMetaSchemaArtifactURL(id),
+			Title:                  contentStringWithFallback(res.Content, "title", entry.Name, identifier),
+			Description:            contentStringWithFallback(res.Content, "description", entry.Description),
+			Dialect:                res.Dialect,
+			RootType:               res.RootType,
+			Content:                res.Content,
+			Hash:                   res.Hash,
 			SourceMetaName:         strings.TrimSpace(entry.Name),
 			SourceMetaIdentifier:   identifier,
 			SourceMetaBytes:        entry.Bytes,
@@ -305,9 +321,6 @@ func (s *SchemaService) HarvestSourceMetaSchemas(ctx context.Context, entries []
 			SourceMetaHealth:       entry.Health,
 			SourceMetaDependencies: entry.Dependencies,
 			LastCrawledAt:          now,
-		}
-		if schema.Title == "" {
-			schema.Title = identifier
 		}
 		if schema.Dialect == "unknown" && strings.TrimSpace(entry.BaseDialect) != "" {
 			schema.Dialect = jsonschema.NormalizeDialect(entry.BaseDialect)
@@ -327,6 +340,26 @@ func (s *SchemaService) HarvestSourceMetaSchemas(ctx context.Context, entries []
 
 func sourceMetaSchemaID(identifier string) string {
 	return shortid.MustGenerate()
+}
+
+func sourceMetaSchemaArtifactURL(id string) string {
+	base := strings.TrimRight(strings.TrimSpace(os.Getenv("SCHEMA_REGISTER_PUBLIC_BASE_URL")), "/")
+	if base == "" {
+		base = defaultSchemaRegisterPublicBaseURL
+	}
+	return base + "/v1/schemas/" + url.PathEscape(id) + "/schema.json"
+}
+
+func contentStringWithFallback(content map[string]any, key string, fallbacks ...string) string {
+	if value, ok := content[key].(string); ok && strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value)
+	}
+	for _, fallback := range fallbacks {
+		if trimmed := strings.TrimSpace(fallback); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func (s *SchemaService) ListOrganisations(ctx context.Context, p *models.ListOrganisationsParams) ([]models.OrganisationSummary, models.Pagination, error) {
@@ -467,7 +500,6 @@ func (s *SchemaService) GetSchemaFilters(ctx context.Context, p *models.SchemaFi
 	groups := []models.FilterGroup{
 		buildDialectGroup(p, counts),
 		buildRootTypeGroup(p, counts),
-		buildOrganisationGroup(p, counts),
 	}
 	for _, g := range groups {
 		if err := g.Validate(); err != nil {

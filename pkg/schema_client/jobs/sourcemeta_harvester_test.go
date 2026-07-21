@@ -9,12 +9,12 @@ import (
 )
 
 func TestSourceMetaListURLFromRoot(t *testing.T) {
-	got, err := sourceMetaListURL("https://static.don.projects.digilab.network/schemas/")
+	got, err := sourceMetaListURL("https://source-meta.internal/")
 	if err != nil {
 		t.Fatalf("sourceMetaListURL() error = %v", err)
 	}
 
-	want := "https://static.don.projects.digilab.network/schemas/self/v1/api/list"
+	want := "https://source-meta.internal/self/v1/api/list"
 	if got != want {
 		t.Fatalf("sourceMetaListURL() = %q, want %q", got, want)
 	}
@@ -22,7 +22,7 @@ func TestSourceMetaListURLFromRoot(t *testing.T) {
 
 func TestSourceMetaHarvesterCrawlsDirectoriesAndMapsSchemaMetadata(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/schemas/self/v1/api/list", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/self/v1/api/list", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(t, w, sourceMetaListResponse{
 			Entries: []sourceMetaEntry{
 				{
@@ -33,7 +33,7 @@ func TestSourceMetaHarvesterCrawlsDirectoriesAndMapsSchemaMetadata(t *testing.T)
 			},
 		})
 	})
-	mux.HandleFunc("/schemas/self/v1/api/list/api-register/", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/self/v1/api/list/api-register/", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(t, w, sourceMetaListResponse{
 			Entries: []sourceMetaEntry{
 				{
@@ -52,10 +52,14 @@ func TestSourceMetaHarvesterCrawlsDirectoriesAndMapsSchemaMetadata(t *testing.T)
 			},
 		})
 	})
+	mux.HandleFunc("/api-register/crs", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/schema+json")
+		_, _ = w.Write([]byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"CRS","description":"Schema description.","type":"object"}`))
+	})
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	harvester := NewSourceMetaHarvester(server.URL+"/schemas/", server.Client())
+	harvester := NewSourceMetaHarvester(server.URL+"/", server.Client())
 	entries, err := harvester.Harvest(context.Background())
 	if err != nil {
 		t.Fatalf("Harvest() error = %v", err)
@@ -71,6 +75,12 @@ func TestSourceMetaHarvesterCrawlsDirectoriesAndMapsSchemaMetadata(t *testing.T)
 	}
 	if entry.Identifier != "https://schemas.example.org/api-register/crs" {
 		t.Fatalf("Identifier = %q", entry.Identifier)
+	}
+	if entry.Path != "/api-register/crs" {
+		t.Fatalf("Path = %q", entry.Path)
+	}
+	if len(entry.RawContent) == 0 {
+		t.Fatalf("RawContent is empty")
 	}
 	if entry.Bytes != 2240 || entry.BytesBundled != 2240 {
 		t.Fatalf("bytes = %d bundled = %d", entry.Bytes, entry.BytesBundled)

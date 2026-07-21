@@ -41,9 +41,6 @@
             "$ref": "#/components/parameters/SearchFilter"
           },
           {
-            "$ref": "#/components/parameters/OrganisationFilter"
-          },
-          {
             "$ref": "#/components/parameters/DialectFilter"
           },
           {
@@ -148,9 +145,6 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/SearchFilter"
-          },
-          {
-            "$ref": "#/components/parameters/OrganisationFilter"
           },
           {
             "$ref": "#/components/parameters/DialectFilter"
@@ -646,9 +640,6 @@
           "contact": {
             "$ref": "#/components/schemas/Contact"
           },
-          "organisation": {
-            "$ref": "#/components/schemas/OrganisationSummary"
-          },
           "createdAt": {
             "$ref": "#/components/schemas/CreatedAt"
           },
@@ -863,16 +854,6 @@
         "description": "Search term to combine with repository filters. Matches repository name, short description, long description, publiccode.yml url and publiccode.yml landingURL.",
         "schema": {
           "type": "string"
-        }
-      },
-      "OrganisationFilter": {
-        "name": "organisation",
-        "in": "query",
-        "required": false,
-        "description": "Filter by organisation URI.",
-        "schema": {
-          "type": "string",
-          "format": "uri"
         }
       },
       "DialectFilter": {

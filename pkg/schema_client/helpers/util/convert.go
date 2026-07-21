@@ -5,13 +5,6 @@ import (
 )
 
 func ToSchemaSummary(schema *models.Schema) models.SchemaSummary {
-	var orgSummary *models.OrganisationSummary
-	if schema.Organisation != nil {
-		orgSummary = &models.OrganisationSummary{
-			Uri:   schema.Organisation.Uri,
-			Label: schema.Organisation.Label,
-		}
-	}
 	return models.SchemaSummary{
 		Id:          schema.Id,
 		SchemaUrl:   schema.SchemaUrl,
@@ -27,7 +20,6 @@ func ToSchemaSummary(schema *models.Schema) models.SchemaSummary {
 		},
 		CreatedAt:     schema.CreatedAt,
 		LastCrawledAt: schema.LastCrawledAt,
-		Organisation:  orgSummary,
 
 		SourceMetaName:         schema.SourceMetaName,
 		SourceMetaIdentifier:   schema.SourceMetaIdentifier,

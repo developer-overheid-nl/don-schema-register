@@ -155,8 +155,8 @@ func TestListSchemaFilters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSchemaFilters() error = %v", err)
 	}
-	if len(groups) != 3 {
-		t.Fatalf("groups = %#v, want 3 filter groups", groups)
+	if len(groups) != 2 {
+		t.Fatalf("groups = %#v, want 2 filter groups", groups)
 	}
 }
 

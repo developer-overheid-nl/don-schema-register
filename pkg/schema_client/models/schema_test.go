@@ -12,8 +12,8 @@ func TestListSchemasParamsSchemaFiltersCopiesValues(t *testing.T) {
 	}
 
 	filters := params.SchemaFilters()
-	if filters.Organisation == nil || *filters.Organisation != org {
-		t.Fatalf("organisation = %#v, want %q", filters.Organisation, org)
+	if filters.Organisation != nil {
+		t.Fatalf("organisation = %#v, want nil", filters.Organisation)
 	}
 	if filters.Query != "bier" || filters.Dialect[0] != "2020-12" || filters.RootType[0] != "object" {
 		t.Fatalf("filters = %#v, want copied fields", filters)

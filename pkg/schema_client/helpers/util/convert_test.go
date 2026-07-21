@@ -36,8 +36,8 @@ func TestToSchemaSummaryAndDetail(t *testing.T) {
 	if summary.Contact.Name != "Team" || summary.Contact.URL != "https://example.org/contact" || summary.Contact.Email != "team@example.org" {
 		t.Fatalf("contact = %#v, want contact fields copied", summary.Contact)
 	}
-	if summary.Organisation == nil || summary.Organisation.Uri != orgURI || summary.Organisation.Label != "Example Org" {
-		t.Fatalf("organisation = %#v, want summary organisation", summary.Organisation)
+	if summary.Organisation != nil {
+		t.Fatalf("organisation = %#v, want nil", summary.Organisation)
 	}
 	if !summary.CreatedAt.Equal(createdAt) || !summary.LastCrawledAt.Equal(lastCrawledAt) {
 		t.Fatalf("timestamps = %s/%s, want %s/%s", summary.CreatedAt, summary.LastCrawledAt, createdAt, lastCrawledAt)

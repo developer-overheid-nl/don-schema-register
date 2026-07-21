@@ -79,6 +79,7 @@ type Schema struct {
 
 type SourceMetaSchemaMetadata struct {
 	Name         string `json:"name"`
+	Path         string `json:"path,omitempty"`
 	Identifier   string `json:"identifier"`
 	Bytes        int    `json:"bytes"`
 	BytesBundled int    `json:"bytesBundled"`
@@ -87,6 +88,7 @@ type SourceMetaSchemaMetadata struct {
 	Health       int    `json:"health"`
 	Dependencies int    `json:"dependencies"`
 	Description  string `json:"description"`
+	RawContent   []byte `json:"-"`
 }
 
 type SchemaPost struct {
@@ -128,10 +130,9 @@ func (p *ListSchemasParams) SchemaFilters() *SchemaFiltersParams {
 		return &SchemaFiltersParams{}
 	}
 	return &SchemaFiltersParams{
-		Organisation: p.Organisation,
-		Query:        p.Query,
-		Dialect:      append([]string(nil), p.Dialect...),
-		RootType:     append([]string(nil), p.RootType...),
+		Query:    p.Query,
+		Dialect:  append([]string(nil), p.Dialect...),
+		RootType: append([]string(nil), p.RootType...),
 	}
 }
 

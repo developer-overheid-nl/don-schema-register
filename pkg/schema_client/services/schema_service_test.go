@@ -20,6 +20,8 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+var sourceMetaTestSchema = []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"CRS","description":"Schema description.","type":"object"}`)
+
 func newTestService(t *testing.T) (*services.SchemaService, schemas.SchemasRepository) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
@@ -141,18 +143,19 @@ func TestCreateSchemaFromInputWithBody(t *testing.T) {
 	require.Equal(t, "Bier", created.Title)
 	require.Equal(t, "2020-12", created.Dialect)
 	require.Equal(t, "object", created.RootType)
-	require.NotNil(t, created.Organisation)
-	require.Equal(t, org.Uri, created.Organisation.Uri)
+	require.Nil(t, created.Organisation)
 	require.NotEmpty(t, created.Id)
 }
 
 func TestHarvestSourceMetaSchemasStoresMetadata(t *testing.T) {
 	svc, repo := newTestService(t)
 	ctx := context.Background()
+	t.Setenv("SCHEMA_REGISTER_PUBLIC_BASE_URL", "https://api.example.org/schema-register")
 
 	count, err := svc.HarvestSourceMetaSchemas(ctx, []models.SourceMetaSchemaMetadata{
 		{
 			Name:         "crs",
+			Path:         "/api-register/crs",
 			Identifier:   "https://schemas.example.org/api-register/crs",
 			Bytes:        2240,
 			BytesBundled: 2240,
@@ -161,6 +164,7 @@ func TestHarvestSourceMetaSchemasStoresMetadata(t *testing.T) {
 			Health:       82,
 			Dependencies: 0,
 			Description:  "Coordinate reference system.",
+			RawContent:   sourceMetaTestSchema,
 		},
 	})
 	require.NoError(t, err)
@@ -171,10 +175,13 @@ func TestHarvestSourceMetaSchemasStoresMetadata(t *testing.T) {
 	require.Len(t, all, 1)
 
 	schema := all[0]
-	require.Equal(t, "crs", schema.Title)
-	require.Equal(t, "Coordinate reference system.", schema.Description)
+	require.Equal(t, "CRS", schema.Title)
+	require.Equal(t, "Schema description.", schema.Description)
 	require.Equal(t, "2020-12", schema.Dialect)
-	require.Equal(t, "https://schemas.example.org/api-register/crs", schema.SchemaUrl)
+	require.Equal(t, "object", schema.RootType)
+	require.Equal(t, "https://api.example.org/schema-register/v1/schemas/"+schema.Id+"/schema.json", schema.SchemaUrl)
+	require.NotEmpty(t, schema.Hash)
+	require.Equal(t, "object", schema.Content["type"])
 	require.Equal(t, "crs", schema.SourceMetaName)
 	require.Equal(t, "https://schemas.example.org/api-register/crs", schema.SourceMetaIdentifier)
 	require.Equal(t, 2240, schema.SourceMetaBytes)
@@ -193,6 +200,7 @@ func TestHarvestSourceMetaSchemasUsesOpaqueID(t *testing.T) {
 		{
 			Name:       "crs",
 			Identifier: "https://schemas.example.org/api-register/crs",
+			RawContent: sourceMetaTestSchema,
 		},
 	})
 	require.NoError(t, err)
@@ -218,6 +226,7 @@ func TestHarvestSourceMetaSchemasMigratesLegacySourceMetaID(t *testing.T) {
 		{
 			Name:       "crs",
 			Identifier: "https://schemas.example.org/api-register/crs",
+			RawContent: sourceMetaTestSchema,
 		},
 	})
 	require.NoError(t, err)
@@ -227,7 +236,7 @@ func TestHarvestSourceMetaSchemasMigratesLegacySourceMetaID(t *testing.T) {
 	require.Len(t, all, 1)
 	require.NotEqual(t, "source-meta-06aaddfcede69a1f", all[0].Id)
 	require.NotContains(t, all[0].Id, "source-meta")
-	require.Equal(t, "crs", all[0].Title)
+	require.Equal(t, "CRS", all[0].Title)
 }
 
 func TestCreateSchemaFromInputWithURL(t *testing.T) {
@@ -452,12 +461,10 @@ func TestGetSchemaFiltersGroups(t *testing.T) {
 
 	groups, err := svc.GetSchemaFilters(context.Background(), nil)
 	require.NoError(t, err)
-	require.Len(t, groups, 3)
+	require.Len(t, groups, 2)
 	require.Equal(t, "dialect", groups[0].Key)
 	require.Equal(t, "rootType", groups[1].Key)
-	require.Equal(t, "organisation", groups[2].Key)
 	require.Equal(t, "multi-select", groups[0].Type)
-	require.Equal(t, "single-select", groups[2].Type)
 }
 
 func TestSearchSchemasRetrieveModelAndListOrganisations(t *testing.T) {
