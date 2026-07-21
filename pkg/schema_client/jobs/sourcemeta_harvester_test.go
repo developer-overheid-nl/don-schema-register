@@ -20,6 +20,24 @@ func TestSourceMetaListURLFromRoot(t *testing.T) {
 	}
 }
 
+func TestSourceMetaURLsIgnoreLegacySchemasSuffix(t *testing.T) {
+	got, err := sourceMetaListURL("https://source-meta.internal/schemas/")
+	if err != nil {
+		t.Fatalf("sourceMetaListURL() error = %v", err)
+	}
+	if want := "https://source-meta.internal/self/v1/api/list"; got != want {
+		t.Fatalf("sourceMetaListURL() = %q, want %q", got, want)
+	}
+
+	got, err = sourceMetaSchemaURL("https://source-meta.internal/schemas/", "/api-register/crs")
+	if err != nil {
+		t.Fatalf("sourceMetaSchemaURL() error = %v", err)
+	}
+	if want := "https://source-meta.internal/api-register/crs"; got != want {
+		t.Fatalf("sourceMetaSchemaURL() = %q, want %q", got, want)
+	}
+}
+
 func TestSourceMetaHarvesterCrawlsDirectoriesAndMapsSchemaMetadata(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/self/v1/api/list", func(w http.ResponseWriter, _ *http.Request) {

@@ -184,7 +184,7 @@ func (e sourceMetaEntry) toMetadata(rawContent []byte) models.SourceMetaSchemaMe
 }
 
 func sourceMetaListURL(baseURL string) (string, error) {
-	u, err := url.Parse(strings.TrimSpace(baseURL))
+	u, err := sourceMetaBaseURL(baseURL)
 	if err != nil {
 		return "", err
 	}
@@ -209,10 +209,21 @@ func sourceMetaDirectoryURL(currentListURL, directoryPath string) (string, error
 }
 
 func sourceMetaSchemaURL(baseURL, schemaPath string) (string, error) {
-	u, err := url.Parse(strings.TrimSpace(baseURL))
+	u, err := sourceMetaBaseURL(baseURL)
 	if err != nil {
 		return "", err
 	}
 	u.Path = path.Join(u.Path, strings.TrimPrefix(schemaPath, "/"))
 	return u.String(), nil
+}
+
+func sourceMetaBaseURL(baseURL string) (*url.URL, error) {
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return nil, err
+	}
+	if strings.Trim(u.Path, "/") == "schemas" {
+		u.Path = "/"
+	}
+	return u, nil
 }
