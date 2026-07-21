@@ -30,6 +30,26 @@ func TestSourceMetaSchemaURLPreservesSchemasBase(t *testing.T) {
 	}
 }
 
+func TestSourceMetaSchemaURLDoesNotDuplicateSchemasBase(t *testing.T) {
+	got, err := sourceMetaSchemaURL("https://source-meta.internal/schemas/", "/schemas/api-register/crs")
+	if err != nil {
+		t.Fatalf("sourceMetaSchemaURL() error = %v", err)
+	}
+	if want := "https://source-meta.internal/schemas/api-register/crs"; got != want {
+		t.Fatalf("sourceMetaSchemaURL() = %q, want %q", got, want)
+	}
+}
+
+func TestSourceMetaDirectoryURLDoesNotDuplicateSchemasBase(t *testing.T) {
+	got, err := sourceMetaDirectoryURL("https://source-meta.internal/schemas/self/v1/api/list", "/schemas/api-register/")
+	if err != nil {
+		t.Fatalf("sourceMetaDirectoryURL() error = %v", err)
+	}
+	if want := "https://source-meta.internal/schemas/self/v1/api/list/api-register/"; got != want {
+		t.Fatalf("sourceMetaDirectoryURL() = %q, want %q", got, want)
+	}
+}
+
 func TestSourceMetaHarvesterCrawlsDirectoriesAndMapsSchemaMetadata(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/schemas/self/v1/api/list", func(w http.ResponseWriter, _ *http.Request) {
@@ -38,7 +58,7 @@ func TestSourceMetaHarvesterCrawlsDirectoriesAndMapsSchemaMetadata(t *testing.T)
 				{
 					Name: "api-register",
 					Type: "directory",
-					Path: "/api-register/",
+					Path: "/schemas/api-register/",
 				},
 			},
 		})
@@ -49,7 +69,7 @@ func TestSourceMetaHarvesterCrawlsDirectoriesAndMapsSchemaMetadata(t *testing.T)
 				{
 					Name:         "crs",
 					Type:         "schema",
-					Path:         "/api-register/crs",
+					Path:         "/schemas/api-register/crs",
 					Identifier:   "https://schemas.example.org/api-register/crs",
 					Bytes:        2240,
 					BytesBundled: 2240,
@@ -86,7 +106,7 @@ func TestSourceMetaHarvesterCrawlsDirectoriesAndMapsSchemaMetadata(t *testing.T)
 	if entry.Identifier != "https://schemas.example.org/api-register/crs" {
 		t.Fatalf("Identifier = %q", entry.Identifier)
 	}
-	if entry.Path != "/api-register/crs" {
+	if entry.Path != "/schemas/api-register/crs" {
 		t.Fatalf("Path = %q", entry.Path)
 	}
 	if len(entry.RawContent) == 0 {

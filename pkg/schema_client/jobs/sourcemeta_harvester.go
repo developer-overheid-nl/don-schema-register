@@ -198,10 +198,12 @@ func sourceMetaDirectoryURL(currentListURL, directoryPath string) (string, error
 		return "", err
 	}
 	listRoot := u.Path
+	basePath := ""
 	if idx := strings.Index(listRoot, "/self/v1/api/list"); idx >= 0 {
+		basePath = listRoot[:idx]
 		listRoot = listRoot[:idx+len("/self/v1/api/list")]
 	}
-	u.Path = path.Join(listRoot, strings.TrimPrefix(directoryPath, "/"))
+	u.Path = path.Join(listRoot, sourceMetaPathRelativeToBase(basePath, directoryPath))
 	if strings.HasSuffix(directoryPath, "/") {
 		u.Path += "/"
 	}
@@ -213,6 +215,18 @@ func sourceMetaSchemaURL(baseURL, schemaPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	u.Path = path.Join(u.Path, strings.TrimPrefix(schemaPath, "/"))
+	u.Path = path.Join(u.Path, sourceMetaPathRelativeToBase(u.Path, schemaPath))
 	return u.String(), nil
+}
+
+func sourceMetaPathRelativeToBase(basePath, entryPath string) string {
+	relativePath := strings.TrimPrefix(entryPath, "/")
+	trimmedBase := strings.Trim(basePath, "/")
+	if trimmedBase == "" {
+		return relativePath
+	}
+	if relativePath == trimmedBase {
+		return ""
+	}
+	return strings.TrimPrefix(relativePath, trimmedBase+"/")
 }
