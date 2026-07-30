@@ -45,6 +45,9 @@
           },
           {
             "$ref": "#/components/parameters/RootTypeFilter"
+          },
+          {
+            "$ref": "#/components/parameters/SourceMetaRootFilter"
           }
         ],
         "responses": {
@@ -151,6 +154,9 @@
           },
           {
             "$ref": "#/components/parameters/RootTypeFilter"
+          },
+          {
+            "$ref": "#/components/parameters/SourceMetaRootFilter"
           }
         ],
         "responses": {
@@ -662,6 +668,36 @@
           "at"
         ]
       },
+      "SourceMetaHealthIssue": {
+        "type": "object",
+        "description": "A health issue reported by the SourceMeta One API health endpoint.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Identifier name of the health issue"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable health issue message"
+          },
+          "description": {
+            "type": "string",
+            "description": "Additional health issue description"
+          },
+          "pointers": {
+            "type": "array",
+            "description": "JSON Pointer locations where the issue occurs",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "message",
+          "pointers"
+        ]
+      },
       "SchemaSummary": {
         "type": "object",
         "properties": {
@@ -698,6 +734,19 @@
           "sourceMetaName": {
             "type": "string",
             "description": "Name reported by the SourceMeta One API entry"
+          },
+          "sourceMetaPath": {
+            "type": "string",
+            "description": "Relative SourceMeta schema path without the leading /schemas base"
+          },
+          "sourceMetaRoot": {
+            "type": "string",
+            "description": "First path segment of sourceMetaPath, used for filtering"
+          },
+          "sourceMetaBundledUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "Public URL for downloading the bundled schema"
           },
           "sourceMetaIdentifier": {
             "type": "string",
@@ -751,6 +800,13 @@
                 "description": "Dependency edges reported by SourceMeta for this schema",
                 "items": {
                   "$ref": "#/components/schemas/SourceMetaDependency"
+                }
+              },
+              "sourceMetaHealthIssues": {
+                "type": "array",
+                "description": "Health issues reported by SourceMeta for this schema",
+                "items": {
+                  "$ref": "#/components/schemas/SourceMetaHealthIssue"
                 }
               }
             }
@@ -932,6 +988,18 @@
           "type": "array",
           "items": {
             "$ref": "#/components/schemas/SchemaRootType"
+          }
+        },
+        "explode": true
+      },
+      "SourceMetaRootFilter": {
+        "name": "sourceMetaRoot",
+        "in": "query",
+        "description": "Filter SourceMeta schemas by the first segment of their SourceMeta path. Repeat the parameter to filter on multiple roots.",
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string"
           }
         },
         "explode": true

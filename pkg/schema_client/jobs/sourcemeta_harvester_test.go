@@ -107,6 +107,19 @@ func TestSourceMetaHarvesterCrawlsDirectoriesAndMapsSchemaMetadata(t *testing.T)
 			},
 		})
 	})
+	mux.HandleFunc("/schemas/self/v1/api/schemas/health/api-register/crs", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(t, w, sourceMetaHealthResponse{
+			Score: 82,
+			Errors: []models.SourceMetaHealthIssue{
+				{
+					Name:        "missing_examples",
+					Message:     "Schema has no examples.",
+					Description: "Examples make schemas easier to understand.",
+					Pointers:    []string{""},
+				},
+			},
+		})
+	})
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
@@ -144,6 +157,12 @@ func TestSourceMetaHarvesterCrawlsDirectoriesAndMapsSchemaMetadata(t *testing.T)
 	}
 	if entry.Health != 82 {
 		t.Fatalf("Health = %d", entry.Health)
+	}
+	if len(entry.HealthIssues) != 1 {
+		t.Fatalf("HealthIssues = %#v, want one issue", entry.HealthIssues)
+	}
+	if entry.HealthIssues[0].Name != "missing_examples" {
+		t.Fatalf("HealthIssues[0].Name = %q", entry.HealthIssues[0].Name)
 	}
 	if entry.Dependencies != 1 {
 		t.Fatalf("Dependencies = %d", entry.Dependencies)

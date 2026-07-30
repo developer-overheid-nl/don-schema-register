@@ -24,3 +24,13 @@ func buildRootTypeGroup(p *models.SchemaFiltersParams, counts *models.SchemaFilt
 		Options:     commonfilters.LabeledOptions(counts.RootType, commonfilters.SelectedSet(p.RootType), models.RootTypeLabels, true),
 	}
 }
+
+func buildSourceMetaRootGroup(p *models.SchemaFiltersParams, counts *models.SchemaFilterCounts) models.FilterGroup {
+	return models.FilterGroup{
+		Key:         "sourceMetaRoot",
+		Label:       "SourceMeta root",
+		Description: "De eerste map in het SourceMeta pad, bijvoorbeeld api-register.",
+		Type:        "multi-select",
+		Options:     commonfilters.LabeledOptions(counts.SourceMetaRoot, commonfilters.SelectedSet(p.SourceMetaRoot), nil, true),
+	}
+}

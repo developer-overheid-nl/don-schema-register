@@ -245,9 +245,10 @@ func TestSchemasEndpoints(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		body := decodeBody[[]models.FilterGroup](t, resp)
-		require.Len(t, body, 2)
+		require.Len(t, body, 3)
 		require.Equal(t, "dialect", body[0].Key)
 		require.Equal(t, "rootType", body[1].Key)
+		require.Equal(t, "sourceMetaRoot", body[2].Key)
 
 		dialectValues := map[string]int{}
 		for _, opt := range body[0].Options {

@@ -22,6 +22,9 @@ func ToSchemaSummary(schema *models.Schema) models.SchemaSummary {
 		LastCrawledAt: schema.LastCrawledAt,
 
 		SourceMetaName:         schema.SourceMetaName,
+		SourceMetaPath:         schema.SourceMetaPath,
+		SourceMetaRoot:         schema.SourceMetaRoot,
+		SourceMetaBundledUrl:   schema.SourceMetaBundledUrl,
 		SourceMetaIdentifier:   schema.SourceMetaIdentifier,
 		SourceMetaBytes:        schema.SourceMetaBytes,
 		SourceMetaBytesBundled: schema.SourceMetaBytesBundled,
@@ -37,6 +40,7 @@ func ToSchemaDetail(schema *models.Schema) *models.SchemaDetail {
 		SchemaSummary:               ToSchemaSummary(schema),
 		Content:                     schema.Content,
 		SourceMetaDependencyDetails: append([]models.SourceMetaDependency(nil), schema.SourceMetaDependencyDetails...),
+		SourceMetaHealthIssues:      append([]models.SourceMetaHealthIssue(nil), schema.SourceMetaHealthIssues...),
 	}
 	return detail
 }

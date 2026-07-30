@@ -264,6 +264,13 @@ func (r *schemasRepository) GetSchemaFilterCounts(ctx context.Context, p *models
 		func(schema models.Schema) string { return schema.RootType },
 	)
 
+	result.SourceMetaRoot = commonquery.CountByField(allSchemas,
+		func(schema models.Schema) bool {
+			return schemaMatchesCompiledFilters(schema, matcher, "sourceMetaRoot")
+		},
+		func(schema models.Schema) string { return schema.SourceMetaRoot },
+	)
+
 	result.Organisation = commonquery.CountByFieldWithLabel(allSchemas,
 		func(schema models.Schema) bool {
 			return schemaMatchesCompiledFilters(schema, matcher, "organisation") &&
@@ -323,6 +330,11 @@ func schemaMatchesCompiledFilters(schema models.Schema, matcher *schemaFilterMat
 			return false
 		}
 	}
+	if exclude != "sourceMetaRoot" && len(p.SourceMetaRoot) > 0 {
+		if !containsStr(p.SourceMetaRoot, schema.SourceMetaRoot) {
+			return false
+		}
+	}
 	return true
 }
 
@@ -332,7 +344,8 @@ func schemaMatchesQuery(schema models.Schema, query string) bool {
 	}
 	return strings.Contains(strings.ToLower(schema.Title), query) ||
 		strings.Contains(strings.ToLower(schema.Description), query) ||
-		strings.Contains(strings.ToLower(schema.SchemaUrl), query)
+		strings.Contains(strings.ToLower(schema.SchemaUrl), query) ||
+		strings.Contains(strings.ToLower(schema.SourceMetaPath), query)
 }
 
 func containsStr(slice []string, val string) bool {

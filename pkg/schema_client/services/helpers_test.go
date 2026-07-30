@@ -59,3 +59,13 @@ func TestDeriveOrganisationURI(t *testing.T) {
 		t.Fatalf("deriveOrganisationURI(id) = %q", got)
 	}
 }
+
+func TestSourceMetaPublicSchemaURLUsesConfiguredBase(t *testing.T) {
+	t.Setenv("SOURCEMETA_PUBLIC_SCHEMA_BASE_URL", "https://static.don.projects.digilab.network/schemas/")
+
+	got := sourceMetaPublicSchemaURL("/schemas/api-register/pdok/Test Schema")
+	want := "https://static.don.projects.digilab.network/schemas/api-register/pdok/Test%20Schema"
+	if got != want {
+		t.Fatalf("sourceMetaPublicSchemaURL() = %q, want %q", got, want)
+	}
+}

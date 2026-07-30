@@ -34,6 +34,9 @@ type SchemaSummary struct {
 	Organisation           *OrganisationSummary `json:"organisation,omitempty" gorm:"foreignKey:OrganisationID;references:Uri"`
 	OrganisationID         *string              `json:"-" gorm:"column:organisation_id"`
 	SourceMetaName         string               `json:"sourceMetaName,omitempty" gorm:"column:source_meta_name"`
+	SourceMetaPath         string               `json:"sourceMetaPath,omitempty" gorm:"column:source_meta_path"`
+	SourceMetaRoot         string               `json:"sourceMetaRoot,omitempty" gorm:"column:source_meta_root"`
+	SourceMetaBundledUrl   string               `json:"sourceMetaBundledUrl,omitempty" gorm:"column:source_meta_bundled_url"`
 	SourceMetaIdentifier   string               `json:"sourceMetaIdentifier,omitempty" gorm:"column:source_meta_identifier"`
 	SourceMetaBytes        int                  `json:"sourceMetaBytes,omitempty" gorm:"column:source_meta_bytes"`
 	SourceMetaBytesBundled int                  `json:"sourceMetaBytesBundled,omitempty" gorm:"column:source_meta_bytes_bundled"`
@@ -47,36 +50,41 @@ type SchemaSummary struct {
 
 type SchemaDetail struct {
 	SchemaSummary
-	Content                     map[string]any         `json:"content,omitempty"`
-	SourceMetaDependencyDetails []SourceMetaDependency `json:"sourceMetaDependencyDetails,omitempty"`
+	Content                     map[string]any          `json:"content,omitempty"`
+	SourceMetaDependencyDetails []SourceMetaDependency  `json:"sourceMetaDependencyDetails,omitempty"`
+	SourceMetaHealthIssues      []SourceMetaHealthIssue `json:"sourceMetaHealthIssues,omitempty"`
 }
 
 type Schema struct {
-	Id                          string                 `json:"id" gorm:"column:id;primaryKey"`
-	SchemaUrl                   string                 `json:"schemaUrl,omitempty" gorm:"column:schema_url"`
-	Title                       string                 `json:"title" gorm:"column:title"`
-	Description                 string                 `json:"description,omitempty" gorm:"column:description"`
-	Dialect                     string                 `json:"dialect,omitempty" gorm:"column:dialect"`
-	RootType                    string                 `json:"rootType,omitempty" gorm:"column:root_type"`
-	Collection                  string                 `json:"collection,omitempty" gorm:"column:collection"`
-	ContactName                 string                 `json:"contact_name,omitempty" gorm:"column:contact_name"`
-	ContactUrl                  string                 `json:"contact_url,omitempty" gorm:"column:contact_url"`
-	ContactEmail                string                 `json:"contact_email,omitempty" gorm:"column:contact_email"`
-	Organisation                *Organisation          `json:"-" gorm:"foreignKey:OrganisationID;references:Uri"`
-	OrganisationID              *string                `json:"-" gorm:"column:organisation_id"`
-	Content                     map[string]any         `json:"content,omitempty" gorm:"column:content;serializer:json"`
-	Hash                        string                 `json:"-" gorm:"column:schema_hash"`
-	SourceMetaName              string                 `json:"sourceMetaName,omitempty" gorm:"column:source_meta_name"`
-	SourceMetaIdentifier        string                 `json:"sourceMetaIdentifier,omitempty" gorm:"column:source_meta_identifier"`
-	SourceMetaBytes             int                    `json:"sourceMetaBytes,omitempty" gorm:"column:source_meta_bytes"`
-	SourceMetaBytesBundled      int                    `json:"sourceMetaBytesBundled,omitempty" gorm:"column:source_meta_bytes_bundled"`
-	SourceMetaBaseDialect       string                 `json:"sourceMetaBaseDialect,omitempty" gorm:"column:source_meta_base_dialect"`
-	SourceMetaDialect           string                 `json:"sourceMetaDialect,omitempty" gorm:"column:source_meta_dialect"`
-	SourceMetaHealth            int                    `json:"sourceMetaHealth,omitempty" gorm:"column:source_meta_health"`
-	SourceMetaDependencies      int                    `json:"sourceMetaDependencies,omitempty" gorm:"column:source_meta_dependencies"`
-	SourceMetaDependencyDetails []SourceMetaDependency `json:"sourceMetaDependencyDetails,omitempty" gorm:"column:source_meta_dependency_details;serializer:json"`
-	CreatedAt                   time.Time              `json:"createdAt" gorm:"column:created_at"`
-	LastCrawledAt               time.Time              `json:"lastCrawledAt" gorm:"column:last_crawled_at"`
+	Id                          string                  `json:"id" gorm:"column:id;primaryKey"`
+	SchemaUrl                   string                  `json:"schemaUrl,omitempty" gorm:"column:schema_url"`
+	Title                       string                  `json:"title" gorm:"column:title"`
+	Description                 string                  `json:"description,omitempty" gorm:"column:description"`
+	Dialect                     string                  `json:"dialect,omitempty" gorm:"column:dialect"`
+	RootType                    string                  `json:"rootType,omitempty" gorm:"column:root_type"`
+	Collection                  string                  `json:"collection,omitempty" gorm:"column:collection"`
+	ContactName                 string                  `json:"contact_name,omitempty" gorm:"column:contact_name"`
+	ContactUrl                  string                  `json:"contact_url,omitempty" gorm:"column:contact_url"`
+	ContactEmail                string                  `json:"contact_email,omitempty" gorm:"column:contact_email"`
+	Organisation                *Organisation           `json:"-" gorm:"foreignKey:OrganisationID;references:Uri"`
+	OrganisationID              *string                 `json:"-" gorm:"column:organisation_id"`
+	Content                     map[string]any          `json:"content,omitempty" gorm:"column:content;serializer:json"`
+	Hash                        string                  `json:"-" gorm:"column:schema_hash"`
+	SourceMetaName              string                  `json:"sourceMetaName,omitempty" gorm:"column:source_meta_name"`
+	SourceMetaPath              string                  `json:"sourceMetaPath,omitempty" gorm:"column:source_meta_path"`
+	SourceMetaRoot              string                  `json:"sourceMetaRoot,omitempty" gorm:"column:source_meta_root"`
+	SourceMetaBundledUrl        string                  `json:"sourceMetaBundledUrl,omitempty" gorm:"column:source_meta_bundled_url"`
+	SourceMetaIdentifier        string                  `json:"sourceMetaIdentifier,omitempty" gorm:"column:source_meta_identifier"`
+	SourceMetaBytes             int                     `json:"sourceMetaBytes,omitempty" gorm:"column:source_meta_bytes"`
+	SourceMetaBytesBundled      int                     `json:"sourceMetaBytesBundled,omitempty" gorm:"column:source_meta_bytes_bundled"`
+	SourceMetaBaseDialect       string                  `json:"sourceMetaBaseDialect,omitempty" gorm:"column:source_meta_base_dialect"`
+	SourceMetaDialect           string                  `json:"sourceMetaDialect,omitempty" gorm:"column:source_meta_dialect"`
+	SourceMetaHealth            int                     `json:"sourceMetaHealth,omitempty" gorm:"column:source_meta_health"`
+	SourceMetaHealthIssues      []SourceMetaHealthIssue `json:"sourceMetaHealthIssues,omitempty" gorm:"column:source_meta_health_issues;serializer:json"`
+	SourceMetaDependencies      int                     `json:"sourceMetaDependencies,omitempty" gorm:"column:source_meta_dependencies"`
+	SourceMetaDependencyDetails []SourceMetaDependency  `json:"sourceMetaDependencyDetails,omitempty" gorm:"column:source_meta_dependency_details;serializer:json"`
+	CreatedAt                   time.Time               `json:"createdAt" gorm:"column:created_at"`
+	LastCrawledAt               time.Time               `json:"lastCrawledAt" gorm:"column:last_crawled_at"`
 }
 
 type SourceMetaDependency struct {
@@ -91,19 +99,27 @@ type SourceMetaDependency struct {
 	ToSchemaTitle   string `json:"toSchemaTitle,omitempty"`
 }
 
+type SourceMetaHealthIssue struct {
+	Name        string   `json:"name"`
+	Message     string   `json:"message"`
+	Description string   `json:"description,omitempty"`
+	Pointers    []string `json:"pointers"`
+}
+
 type SourceMetaSchemaMetadata struct {
-	Name              string                 `json:"name"`
-	Path              string                 `json:"path,omitempty"`
-	Identifier        string                 `json:"identifier"`
-	Bytes             int                    `json:"bytes"`
-	BytesBundled      int                    `json:"bytesBundled"`
-	BaseDialect       string                 `json:"baseDialect"`
-	Dialect           string                 `json:"dialect"`
-	Health            int                    `json:"health"`
-	Dependencies      int                    `json:"dependencies"`
-	DependencyDetails []SourceMetaDependency `json:"dependencyDetails,omitempty"`
-	Description       string                 `json:"description"`
-	RawContent        []byte                 `json:"-"`
+	Name              string                  `json:"name"`
+	Path              string                  `json:"path,omitempty"`
+	Identifier        string                  `json:"identifier"`
+	Bytes             int                     `json:"bytes"`
+	BytesBundled      int                     `json:"bytesBundled"`
+	BaseDialect       string                  `json:"baseDialect"`
+	Dialect           string                  `json:"dialect"`
+	Health            int                     `json:"health"`
+	HealthIssues      []SourceMetaHealthIssue `json:"healthIssues,omitempty"`
+	Dependencies      int                     `json:"dependencies"`
+	DependencyDetails []SourceMetaDependency  `json:"dependencyDetails,omitempty"`
+	Description       string                  `json:"description"`
+	RawContent        []byte                  `json:"-"`
 }
 
 type SchemaPost struct {
@@ -131,13 +147,14 @@ type ListSchemasSearchParams struct {
 }
 
 type ListSchemasParams struct {
-	Page         int      `query:"page" validate:"omitempty,min=1"`
-	PerPage      int      `query:"perPage" validate:"omitempty,min=1,max=100"`
-	Organisation *string  `query:"organisation"`
-	Query        string   `query:"q"`
-	Dialect      []string `query:"dialect"`
-	RootType     []string `query:"rootType"`
-	BaseURL      string
+	Page           int      `query:"page" validate:"omitempty,min=1"`
+	PerPage        int      `query:"perPage" validate:"omitempty,min=1,max=100"`
+	Organisation   *string  `query:"organisation"`
+	Query          string   `query:"q"`
+	Dialect        []string `query:"dialect"`
+	RootType       []string `query:"rootType"`
+	SourceMetaRoot []string `query:"sourceMetaRoot"`
+	BaseURL        string
 }
 
 func (p *ListSchemasParams) SchemaFilters() *SchemaFiltersParams {
@@ -145,9 +162,10 @@ func (p *ListSchemasParams) SchemaFilters() *SchemaFiltersParams {
 		return &SchemaFiltersParams{}
 	}
 	return &SchemaFiltersParams{
-		Query:    p.Query,
-		Dialect:  append([]string(nil), p.Dialect...),
-		RootType: append([]string(nil), p.RootType...),
+		Query:          p.Query,
+		Dialect:        append([]string(nil), p.Dialect...),
+		RootType:       append([]string(nil), p.RootType...),
+		SourceMetaRoot: append([]string(nil), p.SourceMetaRoot...),
 	}
 }
 
@@ -166,14 +184,16 @@ type FilterGroup = commonfilters.FilterGroup
 type FilterCount = commonfilters.FilterCount
 
 type SchemaFilterCounts struct {
-	Dialect      []FilterCount
-	RootType     []FilterCount
-	Organisation []FilterCount
+	Dialect        []FilterCount
+	RootType       []FilterCount
+	SourceMetaRoot []FilterCount
+	Organisation   []FilterCount
 }
 
 type SchemaFiltersParams struct {
-	Organisation *string  `query:"organisation"`
-	Query        string   `query:"q"`
-	Dialect      []string `query:"dialect"`
-	RootType     []string `query:"rootType"`
+	Organisation   *string  `query:"organisation"`
+	Query          string   `query:"q"`
+	Dialect        []string `query:"dialect"`
+	RootType       []string `query:"rootType"`
+	SourceMetaRoot []string `query:"sourceMetaRoot"`
 }

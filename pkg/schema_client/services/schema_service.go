@@ -7,6 +7,8 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"path"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -24,7 +26,7 @@ import (
 // fetchOrigin wordt als Origin-header meegestuurd bij het ophalen van schemas.
 const fetchOrigin = "https://developer.overheid.nl"
 
-const schemaRegisterArtifactBaseURL = "https://api.don.projects.digilab.network/schema-register"
+const defaultSourceMetaPublicSchemaBaseURL = "https://static.developer.overheid.nl/schemas/"
 
 // ErrNeedsPost geeft aan dat een PUT verwijst naar een schema dat (nog) niet
 // bestaat en via POST geregistreerd moet worden.
@@ -302,10 +304,16 @@ func (s *SchemaService) HarvestSourceMetaSchemas(ctx context.Context, entries []
 			continue
 		}
 
+		sourceMetaPath := normalizeSourceMetaPath(entry.Path)
+		if sourceMetaPath == "" {
+			sourceMetaPath = normalizeSourceMetaPath(identifier)
+		}
+		sourceMetaRoot := sourceMetaRootFromPath(sourceMetaPath)
+		schemaURL := sourceMetaPublicSchemaURL(sourceMetaPath)
 		id := sourceMetaSchemaID(identifier)
 		schema := &models.Schema{
 			Id:                          id,
-			SchemaUrl:                   sourceMetaSchemaArtifactURL(id),
+			SchemaUrl:                   schemaURL,
 			Title:                       contentStringWithFallback(res.Content, "title", entry.Name, identifier),
 			Description:                 contentStringWithFallback(res.Content, "description", entry.Description),
 			Dialect:                     res.Dialect,
@@ -313,12 +321,16 @@ func (s *SchemaService) HarvestSourceMetaSchemas(ctx context.Context, entries []
 			Content:                     res.Content,
 			Hash:                        res.Hash,
 			SourceMetaName:              strings.TrimSpace(entry.Name),
+			SourceMetaPath:              sourceMetaPath,
+			SourceMetaRoot:              sourceMetaRoot,
+			SourceMetaBundledUrl:        sourceMetaBundledSchemaURL(schemaURL),
 			SourceMetaIdentifier:        identifier,
 			SourceMetaBytes:             entry.Bytes,
 			SourceMetaBytesBundled:      entry.BytesBundled,
 			SourceMetaBaseDialect:       strings.TrimSpace(entry.BaseDialect),
 			SourceMetaDialect:           strings.TrimSpace(entry.Dialect),
 			SourceMetaHealth:            entry.Health,
+			SourceMetaHealthIssues:      append([]models.SourceMetaHealthIssue(nil), entry.HealthIssues...),
 			SourceMetaDependencies:      entry.Dependencies,
 			SourceMetaDependencyDetails: append([]models.SourceMetaDependency(nil), entry.DependencyDetails...),
 			LastCrawledAt:               now,
@@ -330,8 +342,10 @@ func (s *SchemaService) HarvestSourceMetaSchemas(ctx context.Context, entries []
 		if err := s.repo.SaveSchema(ctx, schema); err != nil {
 			return stored, err
 		}
-		if expectedSchemaURL := sourceMetaSchemaArtifactURL(schema.Id); schema.SchemaUrl != expectedSchemaURL {
+		expectedSchemaURL := sourceMetaPublicSchemaURL(schema.SourceMetaPath)
+		if schema.SchemaUrl != expectedSchemaURL || schema.SourceMetaBundledUrl != sourceMetaBundledSchemaURL(expectedSchemaURL) {
 			schema.SchemaUrl = expectedSchemaURL
+			schema.SourceMetaBundledUrl = sourceMetaBundledSchemaURL(expectedSchemaURL)
 			if err := s.repo.SaveSchema(ctx, schema); err != nil {
 				return stored, err
 			}
@@ -447,12 +461,70 @@ func sourceMetaSchemaID(identifier string) string {
 	return shortid.MustGenerate()
 }
 
-func sourceMetaSchemaArtifactURL(id string) string {
-	return schemaRegisterArtifactBaseURL + "/v1/schemas/" + url.PathEscape(id) + "/schema.json"
-}
-
 func sourceMetaSchemaFrontendPath(id string) string {
 	return "schemas/" + url.PathEscape(id)
+}
+
+func sourceMetaPublicSchemaURL(sourceMetaPath string) string {
+	baseURL := strings.TrimSpace(os.Getenv("SOURCEMETA_PUBLIC_SCHEMA_BASE_URL"))
+	if baseURL == "" {
+		baseURL = defaultSourceMetaPublicSchemaBaseURL
+	}
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return strings.TrimRight(baseURL, "/") + "/" + escapedPath(sourceMetaPath)
+	}
+	u.Path = path.Join(u.Path, normalizeSourceMetaPath(sourceMetaPath))
+	return u.String()
+}
+
+func sourceMetaBundledSchemaURL(schemaURL string) string {
+	if strings.TrimSpace(schemaURL) == "" {
+		return ""
+	}
+	u, err := url.Parse(schemaURL)
+	if err != nil {
+		return schemaURL + "?bundle=1"
+	}
+	query := u.Query()
+	query.Set("bundle", "1")
+	u.RawQuery = query.Encode()
+	return u.String()
+}
+
+func normalizeSourceMetaPath(rawPath string) string {
+	trimmed := strings.TrimSpace(rawPath)
+	if trimmed == "" {
+		return ""
+	}
+	if parsed, err := url.Parse(trimmed); err == nil && parsed.Scheme != "" && parsed.Host != "" {
+		trimmed = parsed.Path
+	}
+	trimmed = strings.TrimPrefix(trimmed, "/")
+	return strings.TrimPrefix(trimmed, "schemas/")
+}
+
+func sourceMetaRootFromPath(sourceMetaPath string) string {
+	trimmed := strings.Trim(normalizeSourceMetaPath(sourceMetaPath), "/")
+	if trimmed == "" {
+		return ""
+	}
+	if idx := strings.Index(trimmed, "/"); idx >= 0 {
+		return trimmed[:idx]
+	}
+	return trimmed
+}
+
+func escapedPath(rawPath string) string {
+	segments := strings.Split(normalizeSourceMetaPath(rawPath), "/")
+	escaped := make([]string, 0, len(segments))
+	for _, segment := range segments {
+		if segment == "" {
+			continue
+		}
+		escaped = append(escaped, url.PathEscape(segment))
+	}
+	return strings.Join(escaped, "/")
 }
 
 func contentStringWithFallback(content map[string]any, key string, fallbacks ...string) string {
@@ -605,6 +677,7 @@ func (s *SchemaService) GetSchemaFilters(ctx context.Context, p *models.SchemaFi
 	groups := []models.FilterGroup{
 		buildDialectGroup(p, counts),
 		buildRootTypeGroup(p, counts),
+		buildSourceMetaRootGroup(p, counts),
 	}
 	for _, g := range groups {
 		if err := g.Validate(); err != nil {

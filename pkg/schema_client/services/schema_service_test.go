@@ -162,6 +162,14 @@ func TestHarvestSourceMetaSchemasStoresMetadata(t *testing.T) {
 			Dialect:      "https://json-schema.org/draft/2020-12/schema",
 			Health:       82,
 			Dependencies: 1,
+			HealthIssues: []models.SourceMetaHealthIssue{
+				{
+					Name:        "missing_examples",
+					Message:     "Schema has no examples.",
+					Description: "Examples make schemas easier to understand.",
+					Pointers:    []string{""},
+				},
+			},
 			DependencyDetails: []models.SourceMetaDependency{
 				{
 					From: "https://schemas.example.org/api-register/crs",
@@ -202,16 +210,27 @@ func TestHarvestSourceMetaSchemasStoresMetadata(t *testing.T) {
 	require.Equal(t, "Schema description.", schema.Description)
 	require.Equal(t, "2020-12", schema.Dialect)
 	require.Equal(t, "object", schema.RootType)
-	require.Equal(t, "https://api.don.projects.digilab.network/schema-register/v1/schemas/"+schema.Id+"/schema.json", schema.SchemaUrl)
+	require.Equal(t, "https://static.developer.overheid.nl/schemas/api-register/crs", schema.SchemaUrl)
 	require.NotEmpty(t, schema.Hash)
 	require.Equal(t, "object", schema.Content["type"])
 	require.Equal(t, "crs", schema.SourceMetaName)
+	require.Equal(t, "api-register/crs", schema.SourceMetaPath)
+	require.Equal(t, "api-register", schema.SourceMetaRoot)
+	require.Equal(t, "https://static.developer.overheid.nl/schemas/api-register/crs?bundle=1", schema.SourceMetaBundledUrl)
 	require.Equal(t, "https://schemas.example.org/api-register/crs", schema.SourceMetaIdentifier)
 	require.Equal(t, 2240, schema.SourceMetaBytes)
 	require.Equal(t, 2240, schema.SourceMetaBytesBundled)
 	require.Equal(t, "https://json-schema.org/draft/2020-12/schema", schema.SourceMetaBaseDialect)
 	require.Equal(t, "https://json-schema.org/draft/2020-12/schema", schema.SourceMetaDialect)
 	require.Equal(t, 82, schema.SourceMetaHealth)
+	require.Equal(t, []models.SourceMetaHealthIssue{
+		{
+			Name:        "missing_examples",
+			Message:     "Schema has no examples.",
+			Description: "Examples make schemas easier to understand.",
+			Pointers:    []string{""},
+		},
+	}, schema.SourceMetaHealthIssues)
 	require.Equal(t, 1, schema.SourceMetaDependencies)
 	require.Equal(t, []models.SourceMetaDependency{
 		{
@@ -248,11 +267,12 @@ func TestHarvestSourceMetaSchemasUsesOpaqueID(t *testing.T) {
 	require.NotContains(t, all[0].Id, "source-meta")
 }
 
-func TestHarvestSourceMetaSchemasKeepsArtifactURLInSyncWithExistingID(t *testing.T) {
+func TestHarvestSourceMetaSchemasKeepsStaticURLInSyncWithExistingID(t *testing.T) {
 	svc, repo := newTestService(t)
 	ctx := context.Background()
 	entry := models.SourceMetaSchemaMetadata{
 		Name:       "crs",
+		Path:       "/schemas/api-register/crs",
 		Identifier: "https://schemas.example.org/api-register/crs",
 		RawContent: sourceMetaTestSchema,
 	}
@@ -270,7 +290,8 @@ func TestHarvestSourceMetaSchemasKeepsArtifactURLInSyncWithExistingID(t *testing
 	require.NoError(t, err)
 	require.Len(t, all, 1)
 	require.Equal(t, firstID, all[0].Id)
-	require.Equal(t, "https://api.don.projects.digilab.network/schema-register/v1/schemas/"+firstID+"/schema.json", all[0].SchemaUrl)
+	require.Equal(t, "https://static.developer.overheid.nl/schemas/api-register/crs", all[0].SchemaUrl)
+	require.Equal(t, "https://static.developer.overheid.nl/schemas/api-register/crs?bundle=1", all[0].SourceMetaBundledUrl)
 }
 
 func TestHarvestSourceMetaSchemasMigratesLegacySourceMetaID(t *testing.T) {
@@ -522,9 +543,10 @@ func TestGetSchemaFiltersGroups(t *testing.T) {
 
 	groups, err := svc.GetSchemaFilters(context.Background(), nil)
 	require.NoError(t, err)
-	require.Len(t, groups, 2)
+	require.Len(t, groups, 3)
 	require.Equal(t, "dialect", groups[0].Key)
 	require.Equal(t, "rootType", groups[1].Key)
+	require.Equal(t, "sourceMetaRoot", groups[2].Key)
 	require.Equal(t, "multi-select", groups[0].Type)
 }
 

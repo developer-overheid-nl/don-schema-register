@@ -65,6 +65,14 @@ die direct een refresh-run uitvoert. Daarna draait de job iedere ochtend om
 Zodra de inhoud is gewijzigd, volgen dezelfde stappen als bij een POST:
 validatie, metadata bijwerken, opslaan en opnieuw indexeren in Typesense.
 
+SourceMeta schemas worden ook tijdens deze job geharvest. Relevante
+omgevingsvariabelen:
+
+- `SOURCEMETA_ONE_API_BASE`: interne SourceMeta One API base, standaard
+  `http://source-meta-svc:8000/schemas/`.
+- `SOURCEMETA_PUBLIC_SCHEMA_BASE_URL`: publieke base-URL voor daadwerkelijke
+  schemas, standaard `https://static.developer.overheid.nl/schemas/`.
+
 ## Database
 
 De applicatie gebruikt PostgreSQL. De docker-compose start lokaal een Postgres

@@ -32,16 +32,19 @@ func seedTestSchemas(t *testing.T, repo SchemasRepository) *models.Organisation 
 		{
 			Id: "a", Title: "Adres", Dialect: "2020-12", RootType: "object",
 			OrganisationID: &org.Uri, Hash: "hash-a",
+			SourceMetaPath: "api-register/demo/adres", SourceMetaRoot: "api-register",
 			Content: map[string]any{"type": "object"},
 		},
 		{
 			Id: "b", Title: "Bier", Description: "Een bier", Dialect: "2020-12", RootType: "object",
 			OrganisationID: &org.Uri, Hash: "hash-b",
+			SourceMetaPath: "api-register/demo/bier", SourceMetaRoot: "api-register",
 			Content: map[string]any{"type": "object"},
 		},
 		{
 			Id: "c", Title: "Percentage", Dialect: "oas-3.1", RootType: "number",
 			OrganisationID: &org.Uri, Hash: "hash-c",
+			SourceMetaPath: "demo/percentage", SourceMetaRoot: "demo",
 			Content: map[string]any{"type": "number"},
 		},
 	} {
@@ -93,6 +96,14 @@ func TestGetSchemasFilters(t *testing.T) {
 		result, _, err := repo.GetSchemas(ctx, 1, 20, &models.SchemaFiltersParams{RootType: []string{"object"}})
 		require.NoError(t, err)
 		require.Len(t, result, 2)
+	})
+
+	t.Run("sourceMetaRoot", func(t *testing.T) {
+		result, _, err := repo.GetSchemas(ctx, 1, 20, &models.SchemaFiltersParams{SourceMetaRoot: []string{"api-register"}})
+		require.NoError(t, err)
+		require.Len(t, result, 2)
+		require.Equal(t, "a", result[0].Id)
+		require.Equal(t, "b", result[1].Id)
 	})
 
 	t.Run("query", func(t *testing.T) {
@@ -147,6 +158,13 @@ func TestGetSchemaFilterCounts(t *testing.T) {
 	require.Equal(t, 2, rootTypes["object"])
 	require.Equal(t, 1, rootTypes["number"])
 
+	sourceMetaRoots := map[string]int{}
+	for _, fc := range counts.SourceMetaRoot {
+		sourceMetaRoots[fc.Value] = fc.Count
+	}
+	require.Equal(t, 2, sourceMetaRoots["api-register"])
+	require.Equal(t, 1, sourceMetaRoots["demo"])
+
 	require.Len(t, counts.Organisation, 1)
 	require.Equal(t, org.Uri, counts.Organisation[0].Value)
 	require.Equal(t, 3, counts.Organisation[0].Count)
@@ -175,6 +193,13 @@ func TestGetSchemaFilterCountsExcludesOwnGroup(t *testing.T) {
 	}
 	require.Zero(t, rootTypes["object"])
 	require.Equal(t, 1, rootTypes["number"])
+
+	sourceMetaRoots := map[string]int{}
+	for _, fc := range counts.SourceMetaRoot {
+		sourceMetaRoots[fc.Value] = fc.Count
+	}
+	require.Zero(t, sourceMetaRoots["api-register"])
+	require.Equal(t, 1, sourceMetaRoots["demo"])
 }
 
 func TestSaveSchemaIdempotentOnHash(t *testing.T) {
