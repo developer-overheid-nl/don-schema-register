@@ -1,0 +1,337 @@
+package jobs
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"path"
+	"strings"
+	"time"
+
+	"github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/models"
+)
+
+const (
+	defaultSourceMetaOneAPIBase = "http://source-meta-svc:8000/schemas/"
+	maxSourceMetaSchemaBytes    = 10 << 20 // 10 MiB
+)
+
+type SourceMetaHarvester struct {
+	baseURL    string
+	httpClient *http.Client
+}
+
+type sourceMetaListResponse struct {
+	Entries []sourceMetaEntry `json:"entries"`
+}
+
+type sourceMetaEntry struct {
+	Name         string `json:"name"`
+	Type         string `json:"type"`
+	Path         string `json:"path"`
+	Identifier   string `json:"identifier"`
+	Bytes        int    `json:"bytes"`
+	BytesBundled int    `json:"bytesBundled"`
+	BaseDialect  string `json:"baseDialect"`
+	Dialect      string `json:"dialect"`
+	Health       int    `json:"health"`
+	Dependencies int    `json:"dependencies"`
+	Description  string `json:"description"`
+}
+
+type sourceMetaHealthResponse struct {
+	Score  int                            `json:"score"`
+	Errors []models.SourceMetaHealthIssue `json:"errors"`
+}
+
+func NewSourceMetaHarvester(baseURL string, httpClient *http.Client) *SourceMetaHarvester {
+	if strings.TrimSpace(baseURL) == "" {
+		baseURL = defaultSourceMetaOneAPIBase
+	}
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 60 * time.Second}
+	}
+	return &SourceMetaHarvester{
+		baseURL:    baseURL,
+		httpClient: httpClient,
+	}
+}
+
+func (h *SourceMetaHarvester) Harvest(ctx context.Context) ([]models.SourceMetaSchemaMetadata, error) {
+	rootURL, err := sourceMetaListURL(h.baseURL)
+	if err != nil {
+		return nil, err
+	}
+
+	var schemas []models.SourceMetaSchemaMetadata
+	seen := map[string]bool{}
+	if err := h.harvestList(ctx, rootURL, seen, &schemas); err != nil {
+		return nil, err
+	}
+	return schemas, nil
+}
+
+func (h *SourceMetaHarvester) harvestList(
+	ctx context.Context,
+	listURL string,
+	seen map[string]bool,
+	schemas *[]models.SourceMetaSchemaMetadata,
+) error {
+	if seen[listURL] {
+		return nil
+	}
+	seen[listURL] = true
+
+	response, err := h.fetchList(ctx, listURL)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range response.Entries {
+		switch entry.Type {
+		case "schema":
+			raw, err := h.fetchSchema(ctx, entry.Path)
+			if err != nil {
+				return err
+			}
+			dependencies, err := h.fetchDependencies(ctx, entry.Path, entry.Dependencies)
+			if err != nil {
+				return err
+			}
+			health, err := h.fetchHealth(ctx, entry.Path)
+			if err != nil {
+				return err
+			}
+			*schemas = append(*schemas, entry.toMetadata(raw, dependencies, health))
+		case "directory":
+			nextURL, err := sourceMetaDirectoryURL(listURL, entry.Path)
+			if err != nil {
+				return err
+			}
+			if err := h.harvestList(ctx, nextURL, seen, schemas); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (h *SourceMetaHarvester) fetchList(ctx context.Context, listURL string) (*sourceMetaListResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, listURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("SourceMeta One API ophalen mislukt: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("SourceMeta One API gaf status %s voor %s", resp.Status, listURL)
+	}
+
+	var response sourceMetaListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return nil, fmt.Errorf("SourceMeta One API response parsen mislukt: %w", err)
+	}
+
+	return &response, nil
+}
+
+func (h *SourceMetaHarvester) fetchSchema(ctx context.Context, schemaPath string) ([]byte, error) {
+	schemaURL, err := sourceMetaSchemaURL(h.baseURL, schemaPath)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, schemaURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/schema+json, application/json")
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("SourceMeta schema ophalen mislukt: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("SourceMeta schema gaf status %s voor %s", resp.Status, schemaURL)
+	}
+
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxSourceMetaSchemaBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("SourceMeta schema lezen mislukt: %w", err)
+	}
+	if len(raw) > maxSourceMetaSchemaBytes {
+		return nil, fmt.Errorf("SourceMeta schema is groter dan %d bytes: %s", maxSourceMetaSchemaBytes, schemaURL)
+	}
+	return raw, nil
+}
+
+func (h *SourceMetaHarvester) fetchDependencies(ctx context.Context, schemaPath string, dependencyCount int) ([]models.SourceMetaDependency, error) {
+	if dependencyCount == 0 {
+		return nil, nil
+	}
+
+	dependenciesURL, err := sourceMetaDependenciesURL(h.baseURL, schemaPath)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, dependenciesURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("SourceMeta dependencies ophalen mislukt: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("SourceMeta dependencies gaf status %s voor %s", resp.Status, dependenciesURL)
+	}
+
+	var dependencies []models.SourceMetaDependency
+	if err := json.NewDecoder(resp.Body).Decode(&dependencies); err != nil {
+		return nil, fmt.Errorf("SourceMeta dependencies response parsen mislukt: %w", err)
+	}
+	return dependencies, nil
+}
+
+func (h *SourceMetaHarvester) fetchHealth(ctx context.Context, schemaPath string) (*sourceMetaHealthResponse, error) {
+	healthURL, err := sourceMetaHealthURL(h.baseURL, schemaPath)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("SourceMeta health ophalen mislukt: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("SourceMeta health gaf status %s voor %s", resp.Status, healthURL)
+	}
+
+	var health sourceMetaHealthResponse
+	if err := json.NewDecoder(resp.Body).Decode(&health); err != nil {
+		return nil, fmt.Errorf("SourceMeta health response parsen mislukt: %w", err)
+	}
+	return &health, nil
+}
+
+func (e sourceMetaEntry) toMetadata(rawContent []byte, dependencies []models.SourceMetaDependency, health *sourceMetaHealthResponse) models.SourceMetaSchemaMetadata {
+	score := e.Health
+	var healthIssues []models.SourceMetaHealthIssue
+	if health != nil {
+		score = health.Score
+		healthIssues = append([]models.SourceMetaHealthIssue(nil), health.Errors...)
+	}
+	return models.SourceMetaSchemaMetadata{
+		Name:              e.Name,
+		Path:              e.Path,
+		Identifier:        e.Identifier,
+		Bytes:             e.Bytes,
+		BytesBundled:      e.BytesBundled,
+		BaseDialect:       e.BaseDialect,
+		Dialect:           e.Dialect,
+		Health:            score,
+		HealthIssues:      healthIssues,
+		Dependencies:      e.Dependencies,
+		DependencyDetails: append([]models.SourceMetaDependency(nil), dependencies...),
+		Description:       e.Description,
+		RawContent:        rawContent,
+	}
+}
+
+func sourceMetaListURL(baseURL string) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return "", err
+	}
+	u.Path = path.Join(u.Path, "self", "v1", "api", "list")
+	return u.String(), nil
+}
+
+func sourceMetaDirectoryURL(currentListURL, directoryPath string) (string, error) {
+	u, err := url.Parse(currentListURL)
+	if err != nil {
+		return "", err
+	}
+	listRoot := u.Path
+	basePath := ""
+	if idx := strings.Index(listRoot, "/self/v1/api/list"); idx >= 0 {
+		basePath = listRoot[:idx]
+		listRoot = listRoot[:idx+len("/self/v1/api/list")]
+	}
+	u.Path = path.Join(listRoot, sourceMetaPathRelativeToBase(basePath, directoryPath))
+	if strings.HasSuffix(directoryPath, "/") {
+		u.Path += "/"
+	}
+	return u.String(), nil
+}
+
+func sourceMetaSchemaURL(baseURL, schemaPath string) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return "", err
+	}
+	u.Path = path.Join(u.Path, sourceMetaPathRelativeToBase(u.Path, schemaPath))
+	return u.String(), nil
+}
+
+func sourceMetaDependenciesURL(baseURL, schemaPath string) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return "", err
+	}
+	relativePath := sourceMetaPathRelativeToBase(u.Path, schemaPath)
+	u.Path = path.Join(u.Path, "self", "v1", "api", "schemas", "dependencies", relativePath)
+	return u.String(), nil
+}
+
+func sourceMetaHealthURL(baseURL, schemaPath string) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return "", err
+	}
+	relativePath := sourceMetaPathRelativeToBase(u.Path, schemaPath)
+	u.Path = path.Join(u.Path, "self", "v1", "api", "schemas", "health", relativePath)
+	return u.String(), nil
+}
+
+func sourceMetaPathRelativeToBase(basePath, entryPath string) string {
+	relativePath := strings.TrimPrefix(entryPath, "/")
+	trimmedBase := strings.Trim(basePath, "/")
+	if trimmedBase == "" {
+		return relativePath
+	}
+	if relativePath == trimmedBase {
+		return ""
+	}
+	return strings.TrimPrefix(relativePath, trimmedBase+"/")
+}

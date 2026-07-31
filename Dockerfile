@@ -1,6 +1,17 @@
-FROM ghcr.io/sourcemeta/one:v6.1.0
+FROM golang:1.26.5
 
-COPY one.json .
-COPY schemas ./schemas
+RUN apt-get update && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN sourcemeta one.json
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+ENV GIN_MODE=release
+RUN go build -o main ./cmd/main.go
+
+EXPOSE 1337
+
+CMD ["./main"]
