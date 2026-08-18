@@ -562,6 +562,7 @@ func TestGetSchemaFiltersPutsTypeFirstAndOmitsSourceMetaRoot(t *testing.T) {
 	require.Len(t, groups, 2)
 	require.Equal(t, "rootType", groups[0].Key)
 	require.Equal(t, "Type", groups[0].Label)
+	require.Equal(t, "Het type van het schema.", groups[0].Description)
 	require.Equal(t, "dialect", groups[1].Key)
 	require.Equal(t, "multi-select", groups[0].Type)
 }

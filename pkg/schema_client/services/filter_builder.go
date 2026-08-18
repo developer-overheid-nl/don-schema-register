@@ -19,7 +19,7 @@ func buildRootTypeGroup(p *models.SchemaFiltersParams, counts *models.SchemaFilt
 	return models.FilterGroup{
 		Key:         "rootType",
 		Label:       "Type",
-		Description: "Het root type van het schema (type op het hoogste niveau).",
+		Description: "Het type van het schema.",
 		Type:        "multi-select",
 		Options:     commonfilters.LabeledOptions(counts.RootType, commonfilters.SelectedSet(p.RootType), models.RootTypeLabels, true),
 	}
