@@ -264,13 +264,6 @@ func (r *schemasRepository) GetSchemaFilterCounts(ctx context.Context, p *models
 		func(schema models.Schema) string { return schema.RootType },
 	)
 
-	result.SourceMetaRoot = commonquery.CountByField(allSchemas,
-		func(schema models.Schema) bool {
-			return schemaMatchesCompiledFilters(schema, matcher, "sourceMetaRoot")
-		},
-		func(schema models.Schema) string { return schema.SourceMetaRoot },
-	)
-
 	result.Organisation = commonquery.CountByFieldWithLabel(allSchemas,
 		func(schema models.Schema) bool {
 			return schemaMatchesCompiledFilters(schema, matcher, "organisation") &&
@@ -327,11 +320,6 @@ func schemaMatchesCompiledFilters(schema models.Schema, matcher *schemaFilterMat
 	}
 	if exclude != "rootType" && len(p.RootType) > 0 {
 		if !containsStr(p.RootType, schema.RootType) {
-			return false
-		}
-	}
-	if exclude != "sourceMetaRoot" && len(p.SourceMetaRoot) > 0 {
-		if !containsStr(p.SourceMetaRoot, schema.SourceMetaRoot) {
 			return false
 		}
 	}

@@ -675,9 +675,8 @@ func (s *SchemaService) GetSchemaFilters(ctx context.Context, p *models.SchemaFi
 		p = &models.SchemaFiltersParams{}
 	}
 	groups := []models.FilterGroup{
-		buildDialectGroup(p, counts),
 		buildRootTypeGroup(p, counts),
-		buildSourceMetaRootGroup(p, counts),
+		buildDialectGroup(p, counts),
 	}
 	for _, g := range groups {
 		if err := g.Validate(); err != nil {

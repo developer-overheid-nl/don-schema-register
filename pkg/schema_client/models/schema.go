@@ -147,14 +147,13 @@ type ListSchemasSearchParams struct {
 }
 
 type ListSchemasParams struct {
-	Page           int      `query:"page" validate:"omitempty,min=1"`
-	PerPage        int      `query:"perPage" validate:"omitempty,min=1,max=100"`
-	Organisation   *string  `query:"organisation"`
-	Query          string   `query:"q"`
-	Dialect        []string `query:"dialect"`
-	RootType       []string `query:"rootType"`
-	SourceMetaRoot []string `query:"sourceMetaRoot"`
-	BaseURL        string
+	Page         int      `query:"page" validate:"omitempty,min=1"`
+	PerPage      int      `query:"perPage" validate:"omitempty,min=1,max=100"`
+	Organisation *string  `query:"organisation"`
+	Query        string   `query:"q"`
+	Dialect      []string `query:"dialect"`
+	RootType     []string `query:"rootType"`
+	BaseURL      string
 }
 
 func (p *ListSchemasParams) SchemaFilters() *SchemaFiltersParams {
@@ -162,10 +161,9 @@ func (p *ListSchemasParams) SchemaFilters() *SchemaFiltersParams {
 		return &SchemaFiltersParams{}
 	}
 	return &SchemaFiltersParams{
-		Query:          p.Query,
-		Dialect:        append([]string(nil), p.Dialect...),
-		RootType:       append([]string(nil), p.RootType...),
-		SourceMetaRoot: append([]string(nil), p.SourceMetaRoot...),
+		Query:    p.Query,
+		Dialect:  append([]string(nil), p.Dialect...),
+		RootType: append([]string(nil), p.RootType...),
 	}
 }
 
@@ -184,16 +182,14 @@ type FilterGroup = commonfilters.FilterGroup
 type FilterCount = commonfilters.FilterCount
 
 type SchemaFilterCounts struct {
-	Dialect        []FilterCount
-	RootType       []FilterCount
-	SourceMetaRoot []FilterCount
-	Organisation   []FilterCount
+	Dialect      []FilterCount
+	RootType     []FilterCount
+	Organisation []FilterCount
 }
 
 type SchemaFiltersParams struct {
-	Organisation   *string  `query:"organisation"`
-	Query          string   `query:"q"`
-	Dialect        []string `query:"dialect"`
-	RootType       []string `query:"rootType"`
-	SourceMetaRoot []string `query:"sourceMetaRoot"`
+	Organisation *string  `query:"organisation"`
+	Query        string   `query:"q"`
+	Dialect      []string `query:"dialect"`
+	RootType     []string `query:"rootType"`
 }

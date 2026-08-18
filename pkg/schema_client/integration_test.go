@@ -240,18 +240,24 @@ func TestSchemasEndpoints(t *testing.T) {
 		require.Equal(t, "2", resp.Header.Get("Total-Count"))
 	})
 
+	t.Run("sourceMetaRoot is no longer a filter", func(t *testing.T) {
+		resp := env.doRequest(t, http.MethodGet, "/v1/schemas?sourceMetaRoot=api-register")
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Equal(t, "3", resp.Header.Get("Total-Count"))
+	})
+
 	t.Run("schema filters groups", func(t *testing.T) {
 		resp := env.doRequest(t, http.MethodGet, "/v1/schemas/filters")
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		body := decodeBody[[]models.FilterGroup](t, resp)
-		require.Len(t, body, 3)
-		require.Equal(t, "dialect", body[0].Key)
-		require.Equal(t, "rootType", body[1].Key)
-		require.Equal(t, "sourceMetaRoot", body[2].Key)
+		require.Len(t, body, 2)
+		require.Equal(t, "rootType", body[0].Key)
+		require.Equal(t, "Type", body[0].Label)
+		require.Equal(t, "dialect", body[1].Key)
 
 		dialectValues := map[string]int{}
-		for _, opt := range body[0].Options {
+		for _, opt := range body[1].Options {
 			dialectValues[opt.Value] = opt.Count
 		}
 		require.Equal(t, 2, dialectValues["2020-12"])

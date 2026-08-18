@@ -155,11 +155,14 @@ func TestListSchemaFilters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSchemaFilters() error = %v", err)
 	}
-	if len(groups) != 3 {
-		t.Fatalf("groups = %#v, want 3 filter groups", groups)
+	if len(groups) != 2 {
+		t.Fatalf("groups = %#v, want 2 filter groups", groups)
 	}
-	if groups[2].Key != "sourceMetaRoot" {
-		t.Fatalf("groups[2].Key = %q, want sourceMetaRoot", groups[2].Key)
+	if groups[0].Key != "rootType" || groups[0].Label != "Type" {
+		t.Fatalf("groups[0] = %#v, want Type rootType filter", groups[0])
+	}
+	if groups[1].Key != "dialect" {
+		t.Fatalf("groups[1].Key = %q, want dialect", groups[1].Key)
 	}
 }
 

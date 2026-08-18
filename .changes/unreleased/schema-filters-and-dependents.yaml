@@ -1,0 +1,3 @@
+kind: Changed
+body: Toon Type als eerste schemafilter, verwijder het SourceMeta-rootfilter en maak zowel uitgaande als inkomende schemarelaties vindbaar.
+time: 2026-08-18T11:14:54+02:00

@@ -62,6 +62,16 @@ func TestSourceMetaDependenciesURLDoesNotDuplicateSchemasBase(t *testing.T) {
 	}
 }
 
+func TestSourceMetaDependentsURLDoesNotDuplicateSchemasBase(t *testing.T) {
+	got, err := sourceMetaDependentsURL("https://source-meta.internal/schemas/", "/schemas/api-register/crs")
+	if err != nil {
+		t.Fatalf("sourceMetaDependentsURL() error = %v", err)
+	}
+	if want := "https://source-meta.internal/schemas/self/v1/api/schemas/dependents/api-register/crs"; got != want {
+		t.Fatalf("sourceMetaDependentsURL() = %q, want %q", got, want)
+	}
+}
+
 func TestSourceMetaHarvesterCrawlsDirectoriesAndMapsSchemaMetadata(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/schemas/self/v1/api/list", func(w http.ResponseWriter, _ *http.Request) {
@@ -104,6 +114,15 @@ func TestSourceMetaHarvesterCrawlsDirectoriesAndMapsSchemaMetadata(t *testing.T)
 				From: "https://schemas.example.org/api-register/crs",
 				To:   "https://schemas.example.org/api-register/_shared/link",
 				At:   "/properties/links/items/$ref",
+			},
+		})
+	})
+	mux.HandleFunc("/schemas/self/v1/api/schemas/dependents/api-register/crs", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(t, w, []models.SourceMetaDependency{
+			{
+				From: "https://schemas.example.org/api-register/address",
+				To:   "https://schemas.example.org/api-register/crs",
+				At:   "/properties/crs/$ref",
 			},
 		})
 	})
@@ -167,14 +186,61 @@ func TestSourceMetaHarvesterCrawlsDirectoriesAndMapsSchemaMetadata(t *testing.T)
 	if entry.Dependencies != 1 {
 		t.Fatalf("Dependencies = %d", entry.Dependencies)
 	}
-	if len(entry.DependencyDetails) != 1 {
-		t.Fatalf("DependencyDetails = %#v, want one dependency", entry.DependencyDetails)
+	if len(entry.DependencyDetails) != 2 {
+		t.Fatalf("DependencyDetails = %#v, want one dependency and one dependent", entry.DependencyDetails)
 	}
 	if entry.DependencyDetails[0].To != "https://schemas.example.org/api-register/_shared/link" {
 		t.Fatalf("DependencyDetails[0].To = %q", entry.DependencyDetails[0].To)
 	}
+	if entry.DependencyDetails[1].From != "https://schemas.example.org/api-register/address" {
+		t.Fatalf("DependencyDetails[1].From = %q", entry.DependencyDetails[1].From)
+	}
 	if entry.Description != "Coordinate reference system." {
 		t.Fatalf("Description = %q", entry.Description)
+	}
+}
+
+func TestSourceMetaHarvesterFetchesDependentsWithoutOutgoingDependencies(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/schemas/self/v1/api/list", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(t, w, sourceMetaListResponse{Entries: []sourceMetaEntry{
+			{
+				Name:         "crs",
+				Type:         "schema",
+				Path:         "/schemas/api-register/crs",
+				Identifier:   "https://schemas.example.org/api-register/crs",
+				Dependencies: 0,
+			},
+		}})
+	})
+	mux.HandleFunc("/schemas/api-register/crs", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/schema+json")
+		_, _ = w.Write([]byte(`{"type":"object"}`))
+	})
+	mux.HandleFunc("/schemas/self/v1/api/schemas/dependents/api-register/crs", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(t, w, []models.SourceMetaDependency{
+			{
+				From: "https://schemas.example.org/api-register/address",
+				To:   "https://schemas.example.org/api-register/crs",
+				At:   "/properties/crs/$ref",
+			},
+		})
+	})
+	mux.HandleFunc("/schemas/self/v1/api/schemas/health/api-register/crs", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(t, w, sourceMetaHealthResponse{})
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	entries, err := NewSourceMetaHarvester(server.URL+"/schemas/", server.Client()).Harvest(context.Background())
+	if err != nil {
+		t.Fatalf("Harvest() error = %v", err)
+	}
+	if len(entries) != 1 || len(entries[0].DependencyDetails) != 1 {
+		t.Fatalf("entries = %#v, want one schema with one incoming dependent", entries)
+	}
+	if got := entries[0].DependencyDetails[0].From; got != "https://schemas.example.org/api-register/address" {
+		t.Fatalf("DependencyDetails[0].From = %q", got)
 	}
 }
 

@@ -41,13 +41,10 @@
             "$ref": "#/components/parameters/SearchFilter"
           },
           {
-            "$ref": "#/components/parameters/DialectFilter"
-          },
-          {
             "$ref": "#/components/parameters/RootTypeFilter"
           },
           {
-            "$ref": "#/components/parameters/SourceMetaRootFilter"
+            "$ref": "#/components/parameters/DialectFilter"
           }
         ],
         "responses": {
@@ -150,13 +147,10 @@
             "$ref": "#/components/parameters/SearchFilter"
           },
           {
-            "$ref": "#/components/parameters/DialectFilter"
-          },
-          {
             "$ref": "#/components/parameters/RootTypeFilter"
           },
           {
-            "$ref": "#/components/parameters/SourceMetaRootFilter"
+            "$ref": "#/components/parameters/DialectFilter"
           }
         ],
         "responses": {
@@ -621,7 +615,7 @@
       },
       "SourceMetaDependency": {
         "type": "object",
-        "description": "A dependency edge reported by SourceMeta for a stored schema.",
+        "description": "An outgoing dependency or incoming dependent edge reported by SourceMeta for a stored schema.",
         "properties": {
           "from": {
             "type": "string",
@@ -741,7 +735,7 @@
           },
           "sourceMetaRoot": {
             "type": "string",
-            "description": "First path segment of sourceMetaPath, used for filtering"
+            "description": "First path segment of sourceMetaPath"
           },
           "sourceMetaBundledUrl": {
             "type": "string",
@@ -797,7 +791,7 @@
               },
               "sourceMetaDependencyDetails": {
                 "type": "array",
-                "description": "Dependency edges reported by SourceMeta for this schema",
+                "description": "Outgoing dependency and incoming dependent edges reported by SourceMeta for this schema",
                 "items": {
                   "$ref": "#/components/schemas/SourceMetaDependency"
                 }
@@ -988,18 +982,6 @@
           "type": "array",
           "items": {
             "$ref": "#/components/schemas/SchemaRootType"
-          }
-        },
-        "explode": true
-      },
-      "SourceMetaRootFilter": {
-        "name": "sourceMetaRoot",
-        "in": "query",
-        "description": "Filter SourceMeta schemas by the first segment of their SourceMeta path. Repeat the parameter to filter on multiple roots.",
-        "schema": {
-          "type": "array",
-          "items": {
-            "type": "string"
           }
         },
         "explode": true

@@ -176,6 +176,11 @@ func TestHarvestSourceMetaSchemasStoresMetadata(t *testing.T) {
 					To:   "https://schemas.example.org/api-register/_shared/link",
 					At:   "/properties/links/items/$ref",
 				},
+				{
+					From: "https://schemas.example.org/api-register/_shared/link",
+					To:   "https://schemas.example.org/api-register/crs",
+					At:   "/properties/crs/$ref",
+				},
 			},
 			Description: "Coordinate reference system.",
 			RawContent:  sourceMetaTestSchema,
@@ -243,6 +248,17 @@ func TestHarvestSourceMetaSchemasStoresMetadata(t *testing.T) {
 			ToSchemaId:      dependencyTarget.Id,
 			ToSchemaUrl:     "schemas/" + dependencyTarget.Id,
 			ToSchemaTitle:   "Link",
+		},
+		{
+			From:            "https://schemas.example.org/api-register/_shared/link",
+			To:              "https://schemas.example.org/api-register/crs",
+			At:              "/properties/crs/$ref",
+			FromSchemaId:    dependencyTarget.Id,
+			FromSchemaUrl:   "schemas/" + dependencyTarget.Id,
+			FromSchemaTitle: "Link",
+			ToSchemaId:      schema.Id,
+			ToSchemaUrl:     "schemas/" + schema.Id,
+			ToSchemaTitle:   "CRS",
 		},
 	}, schema.SourceMetaDependencyDetails)
 }
@@ -530,7 +546,7 @@ func TestListSchemasAndRetrieve(t *testing.T) {
 	require.NotEmpty(t, detail.Content)
 }
 
-func TestGetSchemaFiltersGroups(t *testing.T) {
+func TestGetSchemaFiltersPutsTypeFirstAndOmitsSourceMetaRoot(t *testing.T) {
 	svc, _ := newTestService(t)
 	org := createTestOrg(t, svc)
 
@@ -543,10 +559,10 @@ func TestGetSchemaFiltersGroups(t *testing.T) {
 
 	groups, err := svc.GetSchemaFilters(context.Background(), nil)
 	require.NoError(t, err)
-	require.Len(t, groups, 3)
-	require.Equal(t, "dialect", groups[0].Key)
-	require.Equal(t, "rootType", groups[1].Key)
-	require.Equal(t, "sourceMetaRoot", groups[2].Key)
+	require.Len(t, groups, 2)
+	require.Equal(t, "rootType", groups[0].Key)
+	require.Equal(t, "Type", groups[0].Label)
+	require.Equal(t, "dialect", groups[1].Key)
 	require.Equal(t, "multi-select", groups[0].Type)
 }
 

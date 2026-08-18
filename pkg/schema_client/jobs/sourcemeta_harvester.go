@@ -101,11 +101,16 @@ func (h *SourceMetaHarvester) harvestList(
 			if err != nil {
 				return err
 			}
+			dependents, err := h.fetchDependents(ctx, entry.Path)
+			if err != nil {
+				return err
+			}
 			health, err := h.fetchHealth(ctx, entry.Path)
 			if err != nil {
 				return err
 			}
-			*schemas = append(*schemas, entry.toMetadata(raw, dependencies, health))
+			dependencyDetails := mergeSourceMetaDependencies(dependencies, dependents)
+			*schemas = append(*schemas, entry.toMetadata(raw, dependencyDetails, health))
 		case "directory":
 			nextURL, err := sourceMetaDirectoryURL(listURL, entry.Path)
 			if err != nil {
@@ -214,6 +219,51 @@ func (h *SourceMetaHarvester) fetchDependencies(ctx context.Context, schemaPath 
 	return dependencies, nil
 }
 
+func (h *SourceMetaHarvester) fetchDependents(ctx context.Context, schemaPath string) ([]models.SourceMetaDependency, error) {
+	dependentsURL, err := sourceMetaDependentsURL(h.baseURL, schemaPath)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, dependentsURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("SourceMeta dependents ophalen mislukt: %w", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("SourceMeta dependents gaf status %s voor %s", resp.Status, dependentsURL)
+	}
+
+	var dependents []models.SourceMetaDependency
+	if err := json.NewDecoder(resp.Body).Decode(&dependents); err != nil {
+		return nil, fmt.Errorf("SourceMeta dependents response parsen mislukt: %w", err)
+	}
+	return dependents, nil
+}
+
+func mergeSourceMetaDependencies(groups ...[]models.SourceMetaDependency) []models.SourceMetaDependency {
+	seen := make(map[models.SourceMetaDependency]struct{})
+	var merged []models.SourceMetaDependency
+	for _, dependencies := range groups {
+		for _, dependency := range dependencies {
+			if _, exists := seen[dependency]; exists {
+				continue
+			}
+			seen[dependency] = struct{}{}
+			merged = append(merged, dependency)
+		}
+	}
+	return merged
+}
+
 func (h *SourceMetaHarvester) fetchHealth(ctx context.Context, schemaPath string) (*sourceMetaHealthResponse, error) {
 	healthURL, err := sourceMetaHealthURL(h.baseURL, schemaPath)
 	if err != nil {
@@ -311,6 +361,16 @@ func sourceMetaDependenciesURL(baseURL, schemaPath string) (string, error) {
 	}
 	relativePath := sourceMetaPathRelativeToBase(u.Path, schemaPath)
 	u.Path = path.Join(u.Path, "self", "v1", "api", "schemas", "dependencies", relativePath)
+	return u.String(), nil
+}
+
+func sourceMetaDependentsURL(baseURL, schemaPath string) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return "", err
+	}
+	relativePath := sourceMetaPathRelativeToBase(u.Path, schemaPath)
+	u.Path = path.Join(u.Path, "self", "v1", "api", "schemas", "dependents", relativePath)
 	return u.String(), nil
 }
 
