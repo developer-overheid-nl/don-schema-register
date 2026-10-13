@@ -430,13 +430,10 @@ func TestSchemasEndpoints(t *testing.T) {
 		require.Equal(t, "test-version", resp.Header.Get("API-Version"))
 		require.Equal(t, "application/problem+json", resp.Header.Get("Content-Type"))
 
-		type problemResponse struct {
-			Status int    `json:"status"`
-			Title  string `json:"title"`
-		}
-		body := decodeBody[problemResponse](t, resp)
+		body := decodeBody[problemBody](t, resp)
 		require.Equal(t, http.StatusMethodNotAllowed, body.Status)
 		require.Equal(t, "Method not allowed", body.Title)
+		require.Equal(t, "Method not allowed", body.Detail)
 	})
 
 	t.Run("openapi describes schema endpoints", func(t *testing.T) {
