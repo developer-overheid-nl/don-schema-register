@@ -58,23 +58,28 @@ func (c *SchemaController) RetrieveSchemaContent(ctx *gin.Context) {
 	if err != nil {
 		var p problem.ProblemJSON
 		if errors.As(err, &p) {
-			ctx.JSON(p.Status, p)
+			writeProblem(ctx, p)
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, problem.NewInternalServerError(err.Error()))
+		writeProblem(ctx, problem.NewInternalServerError(err.Error()))
 		return
 	}
 	if schema == nil || len(schema.Content) == 0 {
-		notFound := problem.NewNotFound("Resource does not exist")
-		ctx.JSON(notFound.Status, notFound)
+		writeProblem(ctx, problem.NewNotFound("Resource does not exist"))
 		return
 	}
 	payload, err := json.MarshalIndent(schema.Content, "", "  ")
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, problem.NewInternalServerError("kan schema niet serialiseren: "+err.Error()))
+		writeProblem(ctx, problem.NewInternalServerError("kan schema niet serialiseren: "+err.Error()))
 		return
 	}
 	ctx.Data(http.StatusOK, "application/schema+json", payload)
+}
+
+// writeProblem schrijft een ProblemJSON als application/problem+json.
+func writeProblem(ctx *gin.Context, p problem.ProblemJSON) {
+	ctx.Header("Content-Type", "application/problem+json")
+	ctx.JSON(p.Status, p)
 }
 
 // CreateSchema handles POST /schemas
