@@ -5,7 +5,8 @@ import commonproblem "github.com/developer-overheid-nl/don-register-common/probl
 type InvalidParam = commonproblem.InvalidParam
 type ErrorDetail = commonproblem.ErrorDetail
 
-// ProblemJSON implementeert de RFC 7807 error-envelope (gedeeld via don-register-common).
+// ProblemJSON implementeert de RFC 9457 error-envelope met status, title en
+// detail (gedeeld via don-register-common).
 type ProblemJSON = commonproblem.Problem
 
 func New(status int, title string, details ...ErrorDetail) ProblemJSON {

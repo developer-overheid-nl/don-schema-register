@@ -56,6 +56,12 @@ func newIntegrationEnv(t *testing.T) *integrationEnv {
 	}
 }
 
+type problemBody struct {
+	Status int    `json:"status"`
+	Title  string `json:"title"`
+	Detail string `json:"detail"`
+}
+
 func (e *integrationEnv) doRequest(t *testing.T, method, path string) *http.Response {
 	t.Helper()
 	req, err := http.NewRequest(method, e.server.URL+path, nil)
@@ -211,8 +217,26 @@ func TestSchemasEndpoints(t *testing.T) {
 	t.Run("raw schema content not found", func(t *testing.T) {
 		resp := env.doRequest(t, http.MethodGet, "/v1/schemas/does-not-exist/schema.json")
 		require.Equal(t, http.StatusNotFound, resp.StatusCode)
-		require.NoError(t, resp.Body.Close())
+		require.Equal(t, "application/problem+json", resp.Header.Get("Content-Type"))
+
+		body := decodeBody[problemBody](t, resp)
+		require.Equal(t, http.StatusNotFound, body.Status)
+		require.Equal(t, "Resource does not exist", body.Title)
+		require.NotEmpty(t, body.Detail)
 	})
+
+	for _, path := range []string{"/v1/schemas/%FF", "/v1/schemas/%FF/schema.json"} {
+		t.Run("invalid id returns 400 problem "+path, func(t *testing.T) {
+			resp := env.doRequest(t, http.MethodGet, path)
+			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+			require.Equal(t, "application/problem+json", resp.Header.Get("Content-Type"))
+
+			body := decodeBody[problemBody](t, resp)
+			require.Equal(t, http.StatusBadRequest, body.Status)
+			require.Equal(t, "Invalid input", body.Title)
+			require.Equal(t, "id must be valid UTF-8", body.Detail)
+		})
+	}
 
 	t.Run("search schemas via q", func(t *testing.T) {
 		resp := env.doRequest(t, http.MethodGet, "/v1/schemas?q=bier")
@@ -406,13 +430,10 @@ func TestSchemasEndpoints(t *testing.T) {
 		require.Equal(t, "test-version", resp.Header.Get("API-Version"))
 		require.Equal(t, "application/problem+json", resp.Header.Get("Content-Type"))
 
-		type problemResponse struct {
-			Status int    `json:"status"`
-			Title  string `json:"title"`
-		}
-		body := decodeBody[problemResponse](t, resp)
+		body := decodeBody[problemBody](t, resp)
 		require.Equal(t, http.StatusMethodNotAllowed, body.Status)
 		require.Equal(t, "Method not allowed", body.Title)
+		require.Equal(t, "Method not allowed", body.Detail)
 	})
 
 	t.Run("openapi describes schema endpoints", func(t *testing.T) {

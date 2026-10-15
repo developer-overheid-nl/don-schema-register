@@ -208,6 +208,9 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
           "404": {
             "$ref": "#/components/responses/NotFound"
           }
@@ -298,6 +301,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -435,6 +441,11 @@
             "description": "A short, human-readable summary of the problem type",
             "example": "Request validation failed"
           },
+          "detail": {
+            "type": "string",
+            "description": "A human-readable explanation specific to this occurrence of the problem",
+            "example": "id must be valid UTF-8"
+          },
           "errors": {
             "type": "array",
             "items": {
@@ -446,6 +457,7 @@
                   "description": "Location of the error (e.g., body, query, header)",
                   "enum": [
                     "body",
+                    "path",
                     "query"
                   ]
                 },
@@ -476,7 +488,8 @@
         },
         "required": [
           "status",
-          "title"
+          "title",
+          "detail"
         ]
       },
       "ResourceId": {

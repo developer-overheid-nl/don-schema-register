@@ -35,3 +35,18 @@ func TestProblemConstructors(t *testing.T) {
 		})
 	}
 }
+
+func TestProblemDetail(t *testing.T) {
+	withDetails := NewBadRequest("Invalid input",
+		ErrorDetail{In: "path", Location: "#/id", Code: "invalid", Detail: "id must be valid UTF-8"},
+		ErrorDetail{In: "query", Location: "#/page", Code: "min", Detail: "page must be at least 1"},
+	)
+	if want := "id must be valid UTF-8; page must be at least 1"; withDetails.Detail != want {
+		t.Fatalf("detail = %q, want %q", withDetails.Detail, want)
+	}
+
+	withoutDetails := NewNotFound("Resource does not exist")
+	if withoutDetails.Detail != "Resource does not exist" {
+		t.Fatalf("detail = %q, want title as fallback", withoutDetails.Detail)
+	}
+}
