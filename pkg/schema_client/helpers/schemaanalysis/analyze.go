@@ -9,13 +9,12 @@ import (
 
 // Result is de uitkomst van de analyse van één schema.
 type Result struct {
-	Dependencies    []models.SourceMetaDependency
+	Dependencies    []models.Dependency
 	DependencyCount int
 	Health          int
-	HealthIssues    []models.SourceMetaHealthIssue
+	HealthIssues    []models.HealthIssue
 	Bytes           int
 	BytesBundled    int
-	BaseDialect     string
 	Dialect         string
 }
 
@@ -42,7 +41,7 @@ func Analyze(content map[string]any, raw []byte, schemaURL string, lookup Lookup
 				unresolved = append(unresolved, ref)
 			}
 		}
-		res.Dependencies = append(res.Dependencies, models.SourceMetaDependency{
+		res.Dependencies = append(res.Dependencies, models.Dependency{
 			From: base, To: to, At: ref.At,
 		})
 	}
@@ -62,6 +61,6 @@ func Analyze(content map[string]any, raw []byte, schemaURL string, lookup Lookup
 
 	dialect, _ := content["$schema"].(string)
 	dialect = strings.TrimSpace(dialect)
-	res.BaseDialect, res.Dialect = dialect, dialect
+	res.Dialect = dialect
 	return res
 }

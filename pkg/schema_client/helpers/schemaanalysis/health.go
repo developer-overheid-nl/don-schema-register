@@ -13,8 +13,8 @@ import (
 // Health beoordeelt een schema met een eigen, eenvoudige regelset en geeft
 // een score (0-100) en de gevonden issues, in de volgorde van de regels.
 // unresolved zijn de refs die niet binnen het register te vinden zijn.
-func Health(content map[string]any, schemaURL string, unresolved []Ref) (int, []models.SourceMetaHealthIssue) {
-	var issues []models.SourceMetaHealthIssue
+func Health(content map[string]any, schemaURL string, unresolved []Ref) (int, []models.HealthIssue) {
+	var issues []models.HealthIssue
 	total, passed := 0, 0
 
 	// check registreert één regel; pointers is leeg als er geen issue is.
@@ -24,7 +24,7 @@ func Health(content map[string]any, schemaURL string, unresolved []Ref) (int, []
 			passed += weight
 			return
 		}
-		issues = append(issues, models.SourceMetaHealthIssue{
+		issues = append(issues, models.HealthIssue{
 			Name: name, Message: message, Pointers: pointers,
 		})
 	}

@@ -264,8 +264,8 @@ func TestSchemasEndpoints(t *testing.T) {
 		require.Equal(t, "2", resp.Header.Get("Total-Count"))
 	})
 
-	t.Run("sourceMetaRoot is no longer a filter", func(t *testing.T) {
-		resp := env.doRequest(t, http.MethodGet, "/v1/schemas?sourceMetaRoot=api-register")
+	t.Run("collection is not a filter", func(t *testing.T) {
+		resp := env.doRequest(t, http.MethodGet, "/v1/schemas?collection=api-register")
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		require.Equal(t, "3", resp.Header.Get("Total-Count"))
 	})

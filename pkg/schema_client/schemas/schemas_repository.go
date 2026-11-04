@@ -54,18 +54,18 @@ func (r *schemasRepository) SaveSchema(ctx context.Context, schema *models.Schem
 		}
 	}
 
-	if !found && schema.SourceMetaIdentifier != "" {
-		err := r.db.WithContext(ctx).Where("source_meta_identifier = ?", schema.SourceMetaIdentifier).First(&existing).Error
+	if !found && schema.SourceUrl != "" {
+		err := r.db.WithContext(ctx).Where("source_url = ?", schema.SourceUrl).First(&existing).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
 		if err == nil {
-			log.Printf("SaveSchema: found existing schema for SourceMeta identifier %q with id %s", schema.SourceMetaIdentifier, existing.Id)
+			log.Printf("SaveSchema: found existing schema for source url %q with id %s", schema.SourceUrl, existing.Id)
 			found = true
 		}
 	}
 
-	if !found && schema.SourceMetaIdentifier == "" && schema.SchemaUrl != "" {
+	if !found && schema.SourceUrl == "" && schema.SchemaUrl != "" {
 		err := r.db.WithContext(ctx).Where("schema_url = ?", schema.SchemaUrl).First(&existing).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
@@ -76,9 +76,9 @@ func (r *schemasRepository) SaveSchema(ctx context.Context, schema *models.Schem
 		}
 	}
 
-	// Geharveste schemas (met SourceMetaIdentifier) zijn alleen via id of
+	// Geharveste schemas (met SourceUrl) zijn alleen via id of
 	// identifier te herkennen; nooit via schema_url of hash.
-	if !found && schema.SourceMetaIdentifier == "" && schema.Hash != "" {
+	if !found && schema.SourceUrl == "" && schema.Hash != "" {
 		err := r.db.WithContext(ctx).Where("schema_hash = ?", schema.Hash).First(&existing).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
@@ -90,24 +90,6 @@ func (r *schemasRepository) SaveSchema(ctx context.Context, schema *models.Schem
 	}
 
 	if found {
-		if schema.SourceMetaIdentifier != "" &&
-			strings.HasPrefix(existing.Id, "source-meta-") &&
-			schema.Id != "" &&
-			schema.Id != existing.Id {
-			if schema.CreatedAt.IsZero() {
-				schema.CreatedAt = existing.CreatedAt
-			}
-			if schema.OrganisationID == nil {
-				schema.OrganisationID = existing.OrganisationID
-			}
-			return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-				if err := tx.Delete(&existing).Error; err != nil {
-					return err
-				}
-				return tx.Create(schema).Error
-			})
-		}
-
 		schema.Id = existing.Id
 		if schema.CreatedAt.IsZero() {
 			schema.CreatedAt = existing.CreatedAt
@@ -133,9 +115,9 @@ func (r *schemasRepository) UpdateSchemaAnalysis(ctx context.Context, schema *mo
 	return r.db.WithContext(ctx).Model(&models.Schema{}).
 		Where("id = ?", schema.Id).
 		Select(
-			"SourceMetaDependencyDetails", "SourceMetaDependencies", "SourceMetaHealth",
-			"SourceMetaHealthIssues", "SourceMetaBytes", "SourceMetaBytesBundled",
-			"SourceMetaBaseDialect", "SourceMetaDialect", "SourceMetaBundledUrl",
+			"Dependencies", "DependencyCount", "Health",
+			"HealthIssues", "Bytes", "BundledBytes",
+			"DialectUri", "BundledSchemaUrl",
 		).
 		Updates(schema).Error
 }
@@ -356,7 +338,7 @@ func schemaMatchesQuery(schema models.Schema, query string) bool {
 	return strings.Contains(strings.ToLower(schema.Title), query) ||
 		strings.Contains(strings.ToLower(schema.Description), query) ||
 		strings.Contains(strings.ToLower(schema.SchemaUrl), query) ||
-		strings.Contains(strings.ToLower(schema.SourceMetaPath), query)
+		strings.Contains(strings.ToLower(schema.Path), query)
 }
 
 func containsStr(slice []string, val string) bool {

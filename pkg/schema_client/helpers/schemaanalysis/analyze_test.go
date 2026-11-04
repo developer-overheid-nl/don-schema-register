@@ -61,7 +61,6 @@ func TestAnalyzeApiSchema(t *testing.T) {
 	bb, _ := json.MarshalIndent(bundle, "", "  ")
 	assert.Equal(t, len(bb), res.BytesBundled)
 	assert.Equal(t, dialect, res.Dialect)
-	assert.Equal(t, dialect, res.BaseDialect)
 	for _, i := range res.HealthIssues {
 		assert.NotEqual(t, "unresolved_refs", i.Name)
 	}

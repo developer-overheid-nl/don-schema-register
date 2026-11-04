@@ -21,26 +21,23 @@ func ToSchemaSummary(schema *models.Schema) models.SchemaSummary {
 		CreatedAt:     schema.CreatedAt,
 		LastCrawledAt: schema.LastCrawledAt,
 
-		SourceMetaName:         schema.SourceMetaName,
-		SourceMetaPath:         schema.SourceMetaPath,
-		SourceMetaRoot:         schema.SourceMetaRoot,
-		SourceMetaBundledUrl:   schema.SourceMetaBundledUrl,
-		SourceMetaIdentifier:   schema.SourceMetaIdentifier,
-		SourceMetaBytes:        schema.SourceMetaBytes,
-		SourceMetaBytesBundled: schema.SourceMetaBytesBundled,
-		SourceMetaBaseDialect:  schema.SourceMetaBaseDialect,
-		SourceMetaDialect:      schema.SourceMetaDialect,
-		SourceMetaHealth:       schema.SourceMetaHealth,
-		SourceMetaDependencies: schema.SourceMetaDependencies,
+		FileName:         schema.FileName,
+		Path:             schema.Path,
+		BundledSchemaUrl: schema.BundledSchemaUrl,
+		Bytes:            schema.Bytes,
+		BundledBytes:     schema.BundledBytes,
+		DialectUri:       schema.DialectUri,
+		Health:           schema.Health,
+		DependencyCount:  schema.DependencyCount,
 	}
 }
 
 func ToSchemaDetail(schema *models.Schema) *models.SchemaDetail {
 	detail := &models.SchemaDetail{
-		SchemaSummary:               ToSchemaSummary(schema),
-		Content:                     schema.Content,
-		SourceMetaDependencyDetails: append([]models.SourceMetaDependency(nil), schema.SourceMetaDependencyDetails...),
-		SourceMetaHealthIssues:      append([]models.SourceMetaHealthIssue(nil), schema.SourceMetaHealthIssues...),
+		SchemaSummary: ToSchemaSummary(schema),
+		Content:       schema.Content,
+		Dependencies:  append([]models.Dependency(nil), schema.Dependencies...),
+		HealthIssues:  append([]models.HealthIssue(nil), schema.HealthIssues...),
 	}
 	return detail
 }

@@ -261,7 +261,7 @@ func (s *SchemaService) RefreshChangedSchemas(ctx context.Context) (int, error) 
 		if schemaURL == "" {
 			continue
 		}
-		if strings.TrimSpace(candidate.SourceMetaIdentifier) != "" {
+		if strings.TrimSpace(candidate.SourceUrl) != "" {
 			continue
 		}
 
@@ -348,25 +348,24 @@ func (s *SchemaService) HarvestStaticSchemas(ctx context.Context, harvest models
 
 		relative := staticRelativePath(baseURL, fileURL)
 		name := path.Base(relative)
-		sourceMetaPath := relative
-		root := ""
+		collection := ""
 		if idx := strings.Index(relative, "/"); idx >= 0 {
-			root = relative[:idx]
+			collection = relative[:idx]
 		}
 		schema := &models.Schema{
-			Id:                   shortid.MustGenerate(),
-			SchemaUrl:            fileURL,
-			Title:                contentStringWithFallback(res.Content, "title", name),
-			Description:          contentStringWithFallback(res.Content, "description"),
-			Dialect:              res.Dialect,
-			RootType:             res.RootType,
-			Content:              res.Content,
-			Hash:                 res.Hash,
-			SourceMetaName:       name,
-			SourceMetaPath:       sourceMetaPath,
-			SourceMetaRoot:       root,
-			SourceMetaIdentifier: fileURL,
-			LastCrawledAt:        now,
+			Id:            shortid.MustGenerate(),
+			SchemaUrl:     fileURL,
+			Title:         contentStringWithFallback(res.Content, "title", name),
+			Description:   contentStringWithFallback(res.Content, "description"),
+			Dialect:       res.Dialect,
+			RootType:      res.RootType,
+			Content:       res.Content,
+			Hash:          res.Hash,
+			FileName:      name,
+			Path:          relative,
+			Collection:    collection,
+			SourceUrl:     fileURL,
+			LastCrawledAt: now,
 		}
 		if err = s.repo.SaveSchema(ctx, schema); err != nil {
 			return stored, err
@@ -388,7 +387,7 @@ func (s *SchemaService) HarvestStaticSchemas(ctx context.Context, harvest models
 }
 
 // deleteVanishedStaticSchemas verwijdert geharveste schemas (niet-lege
-// SourceMetaIdentifier) die niet meer in de static-listing staan.
+// SourceUrl) die niet meer in de static-listing staan.
 func (s *SchemaService) deleteVanishedStaticSchemas(ctx context.Context, listedURLs []string) error {
 	listed := make(map[string]struct{}, len(listedURLs))
 	for _, u := range listedURLs {
@@ -399,7 +398,7 @@ func (s *SchemaService) deleteVanishedStaticSchemas(ctx context.Context, listedU
 		return err
 	}
 	for _, candidate := range all {
-		identifier := strings.TrimSpace(candidate.SourceMetaIdentifier)
+		identifier := strings.TrimSpace(candidate.SourceUrl)
 		if identifier == "" {
 			continue
 		}
@@ -485,7 +484,7 @@ func (s *SchemaService) runAnalysis(ctx context.Context, raws map[string][]byte)
 
 	results := make([]schemaanalysis.Result, len(all))
 	type incomingEdge struct {
-		dep    models.SourceMetaDependency
+		dep    models.Dependency
 		source models.Schema
 	}
 	incoming := make(map[string][]incomingEdge)
@@ -504,7 +503,7 @@ func (s *SchemaService) runAnalysis(ctx context.Context, raws map[string][]byte)
 		schema := all[i]
 		res := results[i]
 
-		outgoing := append([]models.SourceMetaDependency(nil), res.Dependencies...)
+		outgoing := append([]models.Dependency(nil), res.Dependencies...)
 		sort.SliceStable(outgoing, func(a, b int) bool { return outgoing[a].At < outgoing[b].At })
 		in := incoming[schema.Id]
 		sort.SliceStable(in, func(a, b int) bool {
@@ -516,7 +515,7 @@ func (s *SchemaService) runAnalysis(ctx context.Context, raws map[string][]byte)
 			}
 			return in[a].dep.At < in[b].dep.At
 		})
-		details := make([]models.SourceMetaDependency, 0, len(outgoing)+len(in))
+		details := make([]models.Dependency, 0, len(outgoing)+len(in))
 		for _, dep := range outgoing {
 			details = append(details, enrichDependencyEdge(dep, schema, byKey))
 		}
@@ -525,20 +524,19 @@ func (s *SchemaService) runAnalysis(ctx context.Context, raws map[string][]byte)
 		}
 
 		bytes := res.Bytes
-		if len(raws[schema.Id]) == 0 && strings.TrimSpace(schema.SourceMetaIdentifier) != "" && schema.SourceMetaBytes > 0 {
-			bytes = schema.SourceMetaBytes
+		if len(raws[schema.Id]) == 0 && strings.TrimSpace(schema.SourceUrl) != "" && schema.Bytes > 0 {
+			bytes = schema.Bytes
 		}
 
 		next := schema
-		next.SourceMetaDependencyDetails = details
-		next.SourceMetaDependencies = res.DependencyCount
-		next.SourceMetaHealth = res.Health
-		next.SourceMetaHealthIssues = res.HealthIssues
-		next.SourceMetaBytes = bytes
-		next.SourceMetaBytesBundled = res.BytesBundled
-		next.SourceMetaBaseDialect = res.BaseDialect
-		next.SourceMetaDialect = res.Dialect
-		next.SourceMetaBundledUrl = strings.ReplaceAll(bundledURLTemplate, "{id}", url.PathEscape(schema.Id))
+		next.Dependencies = details
+		next.DependencyCount = res.DependencyCount
+		next.Health = res.Health
+		next.HealthIssues = res.HealthIssues
+		next.Bytes = bytes
+		next.BundledBytes = res.BytesBundled
+		next.DialectUri = res.Dialect
+		next.BundledSchemaUrl = strings.ReplaceAll(bundledURLTemplate, "{id}", url.PathEscape(schema.Id))
 
 		if !analysisChanged(schema, next) {
 			continue
@@ -614,10 +612,10 @@ func bundleURLTemplate() string {
 
 // enrichDependencyEdge zet From* op het werkelijke bronschema en To* via de
 // register-lookup.
-func enrichDependencyEdge(dep models.SourceMetaDependency, source models.Schema, byKey map[string]models.Schema) models.SourceMetaDependency {
-	dep, _ = withSourceMetaDependencySchema(dep, "from", source, true)
+func enrichDependencyEdge(dep models.Dependency, source models.Schema, byKey map[string]models.Schema) models.Dependency {
+	dep, _ = withDependencySchema(dep, "from", source, true)
 	target, found := byKey[strings.TrimSpace(dep.To)]
-	dep, _ = withSourceMetaDependencySchema(dep, "to", target, found)
+	dep, _ = withDependencySchema(dep, "to", target, found)
 	return dep
 }
 
@@ -630,7 +628,7 @@ func analysisKeys(schema models.Schema) []string {
 			keys = append(keys, k)
 		}
 	}
-	add(schema.SourceMetaIdentifier)
+	add(schema.SourceUrl)
 	add(schema.SchemaUrl)
 	if id, ok := schema.Content["$id"].(string); ok {
 		if u, err := url.Parse(strings.TrimSpace(id)); err == nil && u.IsAbs() {
@@ -644,29 +642,28 @@ func analysisKeys(schema models.Schema) []string {
 // analysisChanged vergelijkt de analysevelden van twee schemas; lege en nil
 // slices gelden als gelijk.
 func analysisChanged(a, b models.Schema) bool {
-	return a.SourceMetaDependencies != b.SourceMetaDependencies ||
-		a.SourceMetaHealth != b.SourceMetaHealth ||
-		a.SourceMetaBytes != b.SourceMetaBytes ||
-		a.SourceMetaBytesBundled != b.SourceMetaBytesBundled ||
-		a.SourceMetaBaseDialect != b.SourceMetaBaseDialect ||
-		a.SourceMetaDialect != b.SourceMetaDialect ||
-		a.SourceMetaBundledUrl != b.SourceMetaBundledUrl ||
-		(len(a.SourceMetaDependencyDetails) != 0 || len(b.SourceMetaDependencyDetails) != 0) &&
-			!reflect.DeepEqual(a.SourceMetaDependencyDetails, b.SourceMetaDependencyDetails) ||
-		(len(a.SourceMetaHealthIssues) != 0 || len(b.SourceMetaHealthIssues) != 0) &&
-			!reflect.DeepEqual(a.SourceMetaHealthIssues, b.SourceMetaHealthIssues)
+	return a.DependencyCount != b.DependencyCount ||
+		a.Health != b.Health ||
+		a.Bytes != b.Bytes ||
+		a.BundledBytes != b.BundledBytes ||
+		a.DialectUri != b.DialectUri ||
+		a.BundledSchemaUrl != b.BundledSchemaUrl ||
+		(len(a.Dependencies) != 0 || len(b.Dependencies) != 0) &&
+			!reflect.DeepEqual(a.Dependencies, b.Dependencies) ||
+		(len(a.HealthIssues) != 0 || len(b.HealthIssues) != 0) &&
+			!reflect.DeepEqual(a.HealthIssues, b.HealthIssues)
 }
 
-func withSourceMetaDependencySchema(
-	dependency models.SourceMetaDependency,
+func withDependencySchema(
+	dependency models.Dependency,
 	direction string,
 	schema models.Schema,
 	found bool,
-) (models.SourceMetaDependency, bool) {
+) (models.Dependency, bool) {
 	id, schemaURL, title := "", "", ""
 	if found {
 		id = schema.Id
-		schemaURL = sourceMetaSchemaFrontendPath(schema.Id)
+		schemaURL = schemaFrontendPath(schema.Id)
 		title = schema.Title
 	}
 
@@ -692,7 +689,7 @@ func withSourceMetaDependencySchema(
 	}
 }
 
-func sourceMetaSchemaFrontendPath(id string) string {
+func schemaFrontendPath(id string) string {
 	return "schemas/" + url.PathEscape(id)
 }
 

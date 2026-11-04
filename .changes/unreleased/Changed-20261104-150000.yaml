@@ -1,3 +1,3 @@
 kind: Changed
-body: Het register leest schemas rechtstreeks uit static en berekent dependencies, health en de gebundelde versie zelf. SourceMeta One is niet meer nodig.
+body: Het register leest schemas rechtstreeks uit static en berekent dependencies, health en de gebundelde versie zelf. SourceMeta One is niet meer nodig; de API-velden en databasekolommen dragen daarom ook niet langer het SourceMeta-voorvoegsel (bijvoorbeeld dependencies, healthIssues, bundledSchemaUrl en dialectUri).
 time: 2026-11-04T15:00:00+01:00
