@@ -112,6 +112,9 @@ func (h *SourceMetaHarvester) harvestList(
 			dependencyDetails := mergeSourceMetaDependencies(dependencies, dependents)
 			*schemas = append(*schemas, entry.toMetadata(raw, dependencyDetails, health))
 		case "directory":
+			if h.isSourceMetaSelfDirectory(entry.Path) {
+				continue
+			}
 			nextURL, err := sourceMetaDirectoryURL(listURL, entry.Path)
 			if err != nil {
 				return err
@@ -316,6 +319,17 @@ func (e sourceMetaEntry) toMetadata(rawContent []byte, dependencies []models.Sou
 		Description:       e.Description,
 		RawContent:        rawContent,
 	}
+}
+
+// isSourceMetaSelfDirectory reports whether directoryPath is the "self"
+// directory SourceMeta One adds to every instance. It holds One's own API and
+// MCP schemas, which are not part of the register.
+func (h *SourceMetaHarvester) isSourceMetaSelfDirectory(directoryPath string) bool {
+	basePath := ""
+	if u, err := url.Parse(strings.TrimSpace(h.baseURL)); err == nil {
+		basePath = u.Path
+	}
+	return strings.Trim(sourceMetaPathRelativeToBase(basePath, directoryPath), "/") == "self"
 }
 
 func sourceMetaListURL(baseURL string) (string, error) {
