@@ -77,9 +77,11 @@ SourceMeta: geen One-server, geen `jsonschema`-CLI, geen Sourcemeta-libraries.
   schema's die naar dit schema wijzen, net als nu.
 - **Health:** eigen regels, eigen score 0–100. Verbeterpunten in hetzelfde
   formaat als nu (`name`, `message`, `description`, `pointers`).
-- **Bundel:** de backend maakt de bundel zelf: alle externe `$ref`s (ook
-  transitief) worden ingevoegd onder `$defs` en de `$ref`s worden daarnaartoe
-  herschreven. De bundel wordt geserveerd via een nieuw endpoint
+- **Bundel:** de backend maakt de bundel zelf als JSON Schema "compound
+  document": alle schema's waar het schema (ook transitief) naar verwijst
+  worden met hun eigen `$id` ingevoegd onder `$defs` (`definitions` voor
+  draft-07 en ouder). De `$ref`s blijven ongewijzigd en resolven via die
+  ingebedde `$id`s. De bundel wordt geserveerd via een nieuw endpoint
   `GET /v1/schemas/{id}/bundle.json`, naast het bestaande `schema.json`-endpoint.
 
 ## Wat aan de bouwer is
