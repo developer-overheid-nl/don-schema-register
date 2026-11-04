@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	httpclient "github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/helpers/httpclient"
+	jsonschema "github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/helpers/jsonschema"
 	problem "github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/helpers/problem"
 	"github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/models"
 	"github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/schemas"
@@ -488,7 +489,9 @@ func TestHarvestStaticSchemasDeletesVanishedOnlyWhenComplete(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, all, 2)
 
-	_, err = svc.HarvestStaticSchemas(ctx, models.StaticHarvest{BaseURL: staticBase, Complete: true})
+	_, err = svc.HarvestStaticSchemas(ctx, models.StaticHarvest{
+		BaseURL: staticBase, Complete: true, ListedURLs: []string{staticBase + "ander.schema.json"},
+	})
 	require.NoError(t, err)
 	all, err = repo.AllSchemas(ctx)
 	require.NoError(t, err)
@@ -513,4 +516,58 @@ func TestHarvestStaticSchemasKeepsRecordWhenFileInvalid(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Oud", got.Title)
 	require.Equal(t, "oud", got.Hash)
+}
+
+func TestHarvestStaticSchemasDoesNotDeleteWhenNothingListed(t *testing.T) {
+	svc, repo := newTestService(t)
+	ctx := context.Background()
+	require.NoError(t, repo.SaveSchema(ctx, &models.Schema{Id: "x", Title: "X", SourceMetaIdentifier: staticBase + "x.schema.json"}))
+
+	_, err := svc.HarvestStaticSchemas(ctx, models.StaticHarvest{BaseURL: staticBase, Complete: true})
+	require.NoError(t, err)
+	all, err := repo.AllSchemas(ctx)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+}
+
+func TestHarvestStaticSchemasDoesNotTakeOverAPIRecordWithSameContent(t *testing.T) {
+	svc, repo := newTestService(t)
+	ctx := context.Background()
+	raw := `{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"Gelijk","type":"object"}`
+	res, err := jsonschema.ParseValidateAndHash([]byte(raw), "application/schema+json")
+	require.NoError(t, err)
+	require.NoError(t, repo.SaveSchema(ctx, &models.Schema{
+		Id: "api", Title: "API", SchemaUrl: "https://example.org/api.json", Hash: res.Hash, Content: res.Content,
+	}))
+
+	f := staticFile("a.schema.json", raw)
+	_, err = svc.HarvestStaticSchemas(ctx, models.StaticHarvest{
+		BaseURL: staticBase, Files: []models.StaticSchemaFile{f}, ListedURLs: []string{f.URL}, Complete: true,
+	})
+	require.NoError(t, err)
+
+	all, err := repo.AllSchemas(ctx)
+	require.NoError(t, err)
+	require.Len(t, all, 2)
+	api, err := repo.GetSchemaByID(ctx, "api")
+	require.NoError(t, err)
+	require.Equal(t, "API", api.Title)
+	require.Empty(t, api.SourceMetaIdentifier)
+	require.Equal(t, "https://example.org/api.json", api.SchemaUrl)
+}
+
+func TestHarvestStaticSchemasKeepsIdenticalFilesSeparate(t *testing.T) {
+	svc, repo := newTestService(t)
+	ctx := context.Background()
+	raw := `{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object"}`
+	a, b := staticFile("a.schema.json", raw), staticFile("b.schema.json", raw)
+
+	count, err := svc.HarvestStaticSchemas(ctx, models.StaticHarvest{
+		BaseURL: staticBase, Files: []models.StaticSchemaFile{a, b}, ListedURLs: []string{a.URL, b.URL}, Complete: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 2, count)
+	all, err := repo.AllSchemas(ctx)
+	require.NoError(t, err)
+	require.Len(t, all, 2)
 }

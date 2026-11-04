@@ -339,7 +339,9 @@ func (s *SchemaService) HarvestStaticSchemas(ctx context.Context, harvest models
 		stored++
 	}
 
-	if harvest.Complete {
+	if harvest.Complete && len(harvest.ListedURLs) == 0 {
+		log.Printf("[static] waarschuwing: complete harvest zonder bestanden; niets verwijderd")
+	} else if harvest.Complete {
 		if err := s.deleteVanishedStaticSchemas(ctx, harvest.ListedURLs); err != nil {
 			return stored, err
 		}
@@ -375,6 +377,9 @@ func (s *SchemaService) deleteVanishedStaticSchemas(ctx context.Context, listedU
 			return err
 		}
 		log.Printf("[static] schema %s (%s) verwijderd: bestand niet meer aanwezig", candidate.Id, identifier)
+		if err := deleteSchemaFromTypesense(ctx, candidate.Id); err != nil {
+			log.Printf("[static] schema %s uit Typesense verwijderen mislukt: %v", candidate.Id, err)
+		}
 	}
 	return nil
 }

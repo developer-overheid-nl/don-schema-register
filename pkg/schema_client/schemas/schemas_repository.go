@@ -75,7 +75,9 @@ func (r *schemasRepository) SaveSchema(ctx context.Context, schema *models.Schem
 		}
 	}
 
-	if !found && schema.Hash != "" {
+	// Geharveste schemas (met SourceMetaIdentifier) zijn alleen via id of
+	// identifier te herkennen; nooit via schema_url of hash.
+	if !found && schema.SourceMetaIdentifier == "" && schema.Hash != "" {
 		err := r.db.WithContext(ctx).Where("schema_hash = ?", schema.Hash).First(&existing).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err

@@ -54,15 +54,19 @@ func (h *StaticHarvester) Harvest(ctx context.Context) (models.StaticHarvest, er
 	if _, err := url.Parse(h.baseURL); err != nil {
 		return result, err
 	}
-	h.walk(ctx, h.baseURL, 0, &result)
+	h.walk(ctx, h.baseURL, 0, map[string]bool{}, &result)
 	return result, ctx.Err()
 }
 
-func (h *StaticHarvester) walk(ctx context.Context, dirURL string, depth int, result *models.StaticHarvest) {
+func (h *StaticHarvester) walk(ctx context.Context, dirURL string, depth int, visited map[string]bool, result *models.StaticHarvest) {
 	if ctx.Err() != nil {
 		result.Complete = false
 		return
 	}
+	if visited[dirURL] {
+		return
+	}
+	visited[dirURL] = true
 	if depth > maxStaticDepth {
 		log.Printf("[static] maximale diepte bereikt bij %s", dirURL)
 		result.Complete = false
@@ -82,7 +86,7 @@ func (h *StaticHarvester) walk(ctx context.Context, dirURL string, depth int, re
 		entryURL := dirURL + url.PathEscape(name)
 		switch entry.Type {
 		case "directory":
-			h.walk(ctx, entryURL+"/", depth+1, result)
+			h.walk(ctx, entryURL+"/", depth+1, visited, result)
 		case "file":
 			if !strings.HasSuffix(name, ".json") {
 				continue
@@ -113,7 +117,7 @@ func (h *StaticHarvester) fetchListing(ctx context.Context, listURL string) ([]s
 		return nil, fmt.Errorf("listing %s gaf status %s", listURL, resp.Status)
 	}
 	var entries []staticListEntry
-	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxStaticSchemaBytes)).Decode(&entries); err != nil {
 		return nil, fmt.Errorf("listing %s parsen mislukt: %w", listURL, err)
 	}
 	return entries, nil

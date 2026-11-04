@@ -107,3 +107,27 @@ func TestStaticHarvesterRootListingErrorIsIncomplete(t *testing.T) {
 		t.Fatalf("Complete = true, want false")
 	}
 }
+
+func TestStaticHarvesterSkipsRepeatedDirectories(t *testing.T) {
+	hits := map[string]int{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits[r.URL.Path]++
+		if r.URL.Path == "/schemas/" {
+			_, _ = w.Write([]byte(`[{"name":"a","type":"directory"},{"name":"a","type":"directory"}]`))
+			return
+		}
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer srv.Close()
+
+	res, err := NewStaticHarvester(srv.URL+"/schemas/", srv.Client()).Harvest(context.Background())
+	if err != nil {
+		t.Fatalf("Harvest: %v", err)
+	}
+	if hits["/schemas/a/"] != 1 {
+		t.Fatalf("hits /schemas/a/ = %d, want 1", hits["/schemas/a/"])
+	}
+	if !res.Complete {
+		t.Fatalf("Complete = false, want true")
+	}
+}
