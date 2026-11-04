@@ -651,9 +651,9 @@ func analysisChanged(a, b models.Schema) bool {
 		a.SourceMetaBaseDialect != b.SourceMetaBaseDialect ||
 		a.SourceMetaDialect != b.SourceMetaDialect ||
 		a.SourceMetaBundledUrl != b.SourceMetaBundledUrl ||
-		!(len(a.SourceMetaDependencyDetails) == 0 && len(b.SourceMetaDependencyDetails) == 0) &&
+		(len(a.SourceMetaDependencyDetails) != 0 || len(b.SourceMetaDependencyDetails) != 0) &&
 			!reflect.DeepEqual(a.SourceMetaDependencyDetails, b.SourceMetaDependencyDetails) ||
-		!(len(a.SourceMetaHealthIssues) == 0 && len(b.SourceMetaHealthIssues) == 0) &&
+		(len(a.SourceMetaHealthIssues) != 0 || len(b.SourceMetaHealthIssues) != 0) &&
 			!reflect.DeepEqual(a.SourceMetaHealthIssues, b.SourceMetaHealthIssues)
 }
 
