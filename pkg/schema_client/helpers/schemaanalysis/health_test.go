@@ -88,3 +88,45 @@ func TestHealthNestedPropertyDescriptionsSorted(t *testing.T) {
 		"/properties/b~1c",
 	}, issues[0].Pointers)
 }
+
+func TestHealthRulesMatchImplementations(t *testing.T) {
+	inFile := map[string]bool{}
+	for _, r := range loadHealthRules() {
+		inFile[r.Name] = true
+	}
+	var noImpl, noRule []string
+	for name := range inFile {
+		if healthChecks[name] == nil {
+			noImpl = append(noImpl, name)
+		}
+	}
+	for name := range healthChecks {
+		if !inFile[name] {
+			noRule = append(noRule, name)
+		}
+	}
+	assert.Empty(t, noImpl, "regels in health-rules.json zonder implementatie")
+	assert.Empty(t, noRule, "implementaties zonder regel in health-rules.json")
+}
+
+func TestHealthRulesAreWellFormed(t *testing.T) {
+	rules := loadHealthRules()
+	require.NotEmpty(t, rules)
+	seen := map[string]bool{}
+	for _, r := range rules {
+		assert.NotEmpty(t, r.Name)
+		assert.False(t, seen[r.Name], "dubbele regelnaam %q", r.Name)
+		seen[r.Name] = true
+		assert.Positive(t, r.Weight, "gewicht van %q", r.Name)
+		assert.NotEmpty(t, r.Message, "message van %q", r.Name)
+		assert.NotEmpty(t, r.Description, "description van %q", r.Name)
+	}
+}
+
+func TestHealthIssuesCarryDescription(t *testing.T) {
+	c := healthyContent()
+	delete(c, "title")
+	_, issues := Health(c, healthURL, nil)
+	require.Len(t, issues, 1)
+	assert.NotEmpty(t, issues[0].Description)
+}

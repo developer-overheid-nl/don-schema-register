@@ -75,6 +75,10 @@ Dependencies, health, bestandsgroottes en de gebundelde versie worden door de
 backend zelf berekend voor alle schemas. De gebundelde versie is op te vragen via
 `GET /v1/schemas/{id}/bundle.json`.
 
+De health-regels staan in
+`pkg/schema_client/helpers/schemaanalysis/health-rules.json`; de gewichten daarin
+bepalen de score (gewicht van geslaagde regels ten opzichte van alle toepasselijke regels).
+
 Relevante omgevingsvariabelen:
 
 - `SCHEMA_STATIC_BASE_URL`: base-URL met de originele schemabestanden, standaard
