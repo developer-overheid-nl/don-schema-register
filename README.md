@@ -65,11 +65,23 @@ die direct een refresh-run uitvoert. Daarna draait de job iedere ochtend om
 Zodra de inhoud is gewijzigd, volgen dezelfde stappen als bij een POST:
 validatie, metadata bijwerken, opslaan en opnieuw indexeren in Typesense.
 
-Schemas worden tijdens deze job geharvest uit don-static (JSON directory-listing
-van nginx). Relevante omgevingsvariabele:
+Schemas worden tijdens deze job rechtstreeks uit static geharvest. Static moet
+voor `/schemas/` een JSON directory-listing serveren
+(`autoindex on; autoindex_format json;` in nginx). Schemas die niet meer in de
+listing staan worden verwijderd, maar alleen na een volledige listing; bij een
+lege listing wordt niets verwijderd.
+
+Dependencies, health, bestandsgroottes en de gebundelde versie worden door de
+backend zelf berekend voor alle schemas. De gebundelde versie is op te vragen via
+`GET /v1/schemas/{id}/bundle.json`.
+
+Relevante omgevingsvariabelen:
 
 - `SCHEMA_STATIC_BASE_URL`: base-URL met de originele schemabestanden, standaard
   `https://static.developer.overheid.nl/schemas/`.
+- `SCHEMA_BUNDLE_URL_TEMPLATE`: publieke URL van de gebundelde versie per schema,
+  standaard `https://schemas.developer.overheid.nl/schemas/download/{id}/bundle.json`.
+  `{id}` wordt per schema vervangen.
 
 ## Database
 

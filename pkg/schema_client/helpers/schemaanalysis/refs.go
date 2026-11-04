@@ -1,5 +1,5 @@
 // Package schemaanalysis bevat eigen analyse van JSON Schemas: refs,
-// grootte en dialect. Het vervangt de analyse door SourceMeta One.
+// grootte en dialect, zonder externe analysedienst.
 package schemaanalysis
 
 import (
