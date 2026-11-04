@@ -244,6 +244,49 @@ func TestSourceMetaHarvesterFetchesDependentsWithoutOutgoingDependencies(t *test
 	}
 }
 
+func TestSourceMetaHarvesterSkipsSourceMetaSelfDirectory(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/schemas/self/v1/api/list", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(t, w, sourceMetaListResponse{Entries: []sourceMetaEntry{
+			{
+				Name: "self",
+				Type: "directory",
+				Path: "/schemas/self/",
+			},
+			{
+				Name:       "crs",
+				Type:       "schema",
+				Path:       "/schemas/api-register/crs",
+				Identifier: "https://schemas.example.org/api-register/crs",
+			},
+		}})
+	})
+	mux.HandleFunc("/schemas/self/v1/api/list/self/", func(w http.ResponseWriter, _ *http.Request) {
+		t.Error("harvester crawled the SourceMeta One self directory")
+		writeJSON(t, w, sourceMetaListResponse{})
+	})
+	mux.HandleFunc("/schemas/api-register/crs", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/schema+json")
+		_, _ = w.Write([]byte(`{"type":"object"}`))
+	})
+	mux.HandleFunc("/schemas/self/v1/api/schemas/dependents/api-register/crs", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(t, w, []models.SourceMetaDependency{})
+	})
+	mux.HandleFunc("/schemas/self/v1/api/schemas/health/api-register/crs", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(t, w, sourceMetaHealthResponse{})
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	entries, err := NewSourceMetaHarvester(server.URL+"/schemas/", server.Client()).Harvest(context.Background())
+	if err != nil {
+		t.Fatalf("Harvest() error = %v", err)
+	}
+	if len(entries) != 1 || entries[0].Path != "/schemas/api-register/crs" {
+		t.Fatalf("entries = %#v, want only /schemas/api-register/crs", entries)
+	}
+}
+
 func writeJSON(t *testing.T, w http.ResponseWriter, value any) {
 	t.Helper()
 
