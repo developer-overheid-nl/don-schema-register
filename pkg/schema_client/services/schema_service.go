@@ -465,6 +465,8 @@ func (s *SchemaService) runAnalysis(ctx context.Context, raws map[string][]byte)
 	}
 
 	// Lookup op identifier, schemaUrl en absolute $id (zonder fragment).
+	// Sorteer op id zodat sleutelbotsingen deterministisch worden opgelost.
+	sort.SliceStable(all, func(a, b int) bool { return all[a].Id < all[b].Id })
 	byKey := make(map[string]models.Schema, len(all)*3)
 	for _, schema := range all {
 		for _, key := range analysisKeys(schema) {
@@ -482,13 +484,17 @@ func (s *SchemaService) runAnalysis(ctx context.Context, raws map[string][]byte)
 	}
 
 	results := make([]schemaanalysis.Result, len(all))
-	incoming := make(map[string][]models.SourceMetaDependency)
+	type incomingEdge struct {
+		dep    models.SourceMetaDependency
+		source models.Schema
+	}
+	incoming := make(map[string][]incomingEdge)
 	for i, schema := range all {
 		results[i] = schemaanalysis.Analyze(schema.Content, raws[schema.Id], schema.SchemaUrl, lookup)
 		for _, dep := range results[i].Dependencies {
 			target, ok := byKey[strings.TrimSpace(dep.To)]
 			if ok && target.Id != schema.Id {
-				incoming[target.Id] = append(incoming[target.Id], dep)
+				incoming[target.Id] = append(incoming[target.Id], incomingEdge{dep: dep, source: schema})
 			}
 		}
 	}
@@ -502,13 +508,21 @@ func (s *SchemaService) runAnalysis(ctx context.Context, raws map[string][]byte)
 		sort.SliceStable(outgoing, func(a, b int) bool { return outgoing[a].At < outgoing[b].At })
 		in := incoming[schema.Id]
 		sort.SliceStable(in, func(a, b int) bool {
-			if in[a].From != in[b].From {
-				return in[a].From < in[b].From
+			if in[a].dep.From != in[b].dep.From {
+				return in[a].dep.From < in[b].dep.From
 			}
-			return in[a].At < in[b].At
+			if in[a].source.Id != in[b].source.Id {
+				return in[a].source.Id < in[b].source.Id
+			}
+			return in[a].dep.At < in[b].dep.At
 		})
-		details := append(outgoing, in...)
-		details, _ = enrichSourceMetaDependencies(details, byKey)
+		details := make([]models.SourceMetaDependency, 0, len(outgoing)+len(in))
+		for _, dep := range outgoing {
+			details = append(details, enrichDependencyEdge(dep, schema, byKey))
+		}
+		for _, edge := range in {
+			details = append(details, enrichDependencyEdge(edge.dep, edge.source, byKey))
+		}
 
 		bytes := res.Bytes
 		if len(raws[schema.Id]) == 0 && strings.TrimSpace(schema.SourceMetaIdentifier) != "" && schema.SourceMetaBytes > 0 {
@@ -528,12 +542,21 @@ func (s *SchemaService) runAnalysis(ctx context.Context, raws map[string][]byte)
 		if !analysisChanged(schema, next) {
 			continue
 		}
-		if err := s.repo.UpdateSchema(ctx, &next); err != nil {
+		if err := s.repo.UpdateSchemaAnalysis(ctx, &next); err != nil {
 			return changed, err
 		}
 		changed = append(changed, next)
 	}
 	return changed, nil
+}
+
+// enrichDependencyEdge zet From* op het werkelijke bronschema en To* via de
+// register-lookup.
+func enrichDependencyEdge(dep models.SourceMetaDependency, source models.Schema, byKey map[string]models.Schema) models.SourceMetaDependency {
+	dep, _ = withSourceMetaDependencySchema(dep, "from", source, true)
+	target, found := byKey[strings.TrimSpace(dep.To)]
+	dep, _ = withSourceMetaDependencySchema(dep, "to", target, found)
+	return dep
 }
 
 // analysisKeys geeft de sleutels waarop een schema binnen het register

@@ -18,6 +18,7 @@ type SchemasRepository interface {
 	SaveSchema(ctx context.Context, schema *models.Schema) error
 	DeleteSchema(ctx context.Context, id string) error
 	UpdateSchema(ctx context.Context, schema *models.Schema) error
+	UpdateSchemaAnalysis(ctx context.Context, schema *models.Schema) error
 	SearchSchemas(ctx context.Context, page, perPage int, organisation *string, query string) ([]models.Schema, models.Pagination, error)
 	SaveOrganisatie(organisation *models.Organisation) error
 	AllSchemas(ctx context.Context) ([]models.Schema, error)
@@ -123,6 +124,20 @@ func (r *schemasRepository) SaveSchema(ctx context.Context, schema *models.Schem
 
 func (r *schemasRepository) UpdateSchema(ctx context.Context, schema *models.Schema) error {
 	return r.db.WithContext(ctx).Save(schema).Error
+}
+
+// UpdateSchemaAnalysis schrijft uitsluitend de analysekolommen van een schema
+// (op id), zodat gelijktijdige wijzigingen aan content/hash/titel niet worden
+// overschreven. Select zorgt dat ook nulwaarden worden opgeslagen.
+func (r *schemasRepository) UpdateSchemaAnalysis(ctx context.Context, schema *models.Schema) error {
+	return r.db.WithContext(ctx).Model(&models.Schema{}).
+		Where("id = ?", schema.Id).
+		Select(
+			"SourceMetaDependencyDetails", "SourceMetaDependencies", "SourceMetaHealth",
+			"SourceMetaHealthIssues", "SourceMetaBytes", "SourceMetaBytesBundled",
+			"SourceMetaBaseDialect", "SourceMetaDialect", "SourceMetaBundledUrl",
+		).
+		Updates(schema).Error
 }
 
 func (r *schemasRepository) GetSchemas(ctx context.Context, page, perPage int, p *models.SchemaFiltersParams) ([]models.Schema, models.Pagination, error) {

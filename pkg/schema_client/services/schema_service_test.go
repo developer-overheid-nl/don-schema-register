@@ -596,7 +596,6 @@ func schemaByTitle(t *testing.T, repo schemas.SchemasRepository, title string) m
 
 func TestRefreshAnalysisLinksDependenciesAcrossSources(t *testing.T) {
 	svc, repo := newTestService(t)
-	ctx := context.Background()
 	createTestOrg(t, svc)
 
 	orgURL := "https://schemas.example.org/don/Organisation"
@@ -624,7 +623,6 @@ func TestRefreshAnalysisLinksDependenciesAcrossSources(t *testing.T) {
 	require.Len(t, org.SourceMetaDependencyDetails, 1)
 	require.Equal(t, client.Id, org.SourceMetaDependencyDetails[0].FromSchemaId)
 	require.Equal(t, org.Id, org.SourceMetaDependencyDetails[0].ToSchemaId)
-	_ = ctx
 }
 
 func TestRefreshAnalysisIncomingEdgesFromSeveralSchemas(t *testing.T) {
@@ -693,4 +691,96 @@ func TestCreateSchemaRunsAnalysis(t *testing.T) {
 	require.Greater(t, s.SourceMetaHealth, 0)
 	require.Greater(t, s.SourceMetaBytes, 0)
 	require.Equal(t, "https://json-schema.org/draft/2020-12/schema", s.SourceMetaDialect)
+}
+
+type countingRepo struct {
+	schemas.SchemasRepository
+	analysisWrites int
+}
+
+func (c *countingRepo) UpdateSchemaAnalysis(ctx context.Context, s *models.Schema) error {
+	c.analysisWrites++
+	return c.SchemasRepository.UpdateSchemaAnalysis(ctx, s)
+}
+
+func TestRefreshAnalysisIsIdempotent(t *testing.T) {
+	_, repo := newTestService(t)
+	counting := &countingRepo{SchemasRepository: repo}
+	svc := services.NewSchemaService(counting)
+	draft := `"$schema":"https://json-schema.org/draft/2020-12/schema"`
+	harvestOne(t, svc, "don/B.schema.json", `{`+draft+`,"$id":"https://schemas.example.org/B","title":"B","type":"object"}`)
+	harvestOne(t, svc, "don/A.schema.json", `{`+draft+`,"$id":"https://schemas.example.org/A","title":"A","type":"object","properties":{"b":{"$ref":"https://schemas.example.org/B"}}}`)
+	require.NoError(t, svc.RefreshAnalysis(context.Background()))
+	counting.analysisWrites = 0
+	require.NoError(t, svc.RefreshAnalysis(context.Background()))
+	require.Equal(t, 0, counting.analysisWrites)
+}
+
+func TestUpdateSchemaAnalysisKeepsConcurrentContent(t *testing.T) {
+	svc, repo := newTestService(t)
+	ctx := context.Background()
+	harvestOne(t, svc, "don/A.schema.json", `{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://schemas.example.org/A","title":"A","type":"object"}`)
+	snapshot := schemaByTitle(t, repo, "A")
+
+	// Gelijktijdige wijziging na de snapshot.
+	live := snapshot
+	live.Title = "Nieuw"
+	live.Hash = "nieuwe-hash"
+	live.Content = map[string]any{"title": "Nieuw"}
+	require.NoError(t, repo.UpdateSchema(ctx, &live))
+
+	snapshot.SourceMetaHealth = 42
+	snapshot.SourceMetaBytes = 0
+	require.NoError(t, repo.UpdateSchemaAnalysis(ctx, &snapshot))
+
+	got := schemaByTitle(t, repo, "Nieuw")
+	require.Equal(t, "nieuwe-hash", got.Hash)
+	require.Equal(t, "Nieuw", got.Content["title"])
+	require.Equal(t, 42, got.SourceMetaHealth)
+	require.Equal(t, 0, got.SourceMetaBytes)
+}
+
+func TestRefreshAnalysisFromSideUsesActualSourceSchema(t *testing.T) {
+	svc, repo := newTestService(t)
+	draft := `"$schema":"https://json-schema.org/draft/2020-12/schema"`
+	target := "https://schemas.example.org/T"
+	harvestOne(t, svc, "don/T.schema.json", `{`+draft+`,"$id":"`+target+`","title":"T","type":"object"}`)
+	// $id eindigt op "#": geen byKey-treffer op dep.From.
+	harvestOne(t, svc, "don/H.schema.json", `{`+draft+`,"$id":"https://schemas.example.org/H#","title":"H","type":"object","properties":{"t":{"$ref":"`+target+`"}}}`)
+	// Twee schemas met identieke $id.
+	harvestOne(t, svc, "don/D1.schema.json", `{`+draft+`,"$id":"https://schemas.example.org/D","title":"D1","type":"object","properties":{"t":{"$ref":"`+target+`"}}}`)
+	harvestOne(t, svc, "don/D2.schema.json", `{`+draft+`,"$id":"https://schemas.example.org/D","title":"D2","type":"object","properties":{"t":{"$ref":"`+target+`"}}}`)
+
+	for _, title := range []string{"H", "D1", "D2"} {
+		s := schemaByTitle(t, repo, title)
+		require.Len(t, s.SourceMetaDependencyDetails, 1, title)
+		require.Equal(t, s.Id, s.SourceMetaDependencyDetails[0].FromSchemaId, title)
+	}
+	tgt := schemaByTitle(t, repo, "T")
+	var froms []string
+	for _, d := range tgt.SourceMetaDependencyDetails {
+		froms = append(froms, d.FromSchemaId)
+		require.Equal(t, tgt.Id, d.ToSchemaId)
+	}
+	want := []string{schemaByTitle(t, repo, "H").Id, schemaByTitle(t, repo, "D1").Id, schemaByTitle(t, repo, "D2").Id}
+	require.ElementsMatch(t, want, froms)
+}
+
+func TestHarvestDropsIncomingEdgesOfDeletedSchemas(t *testing.T) {
+	svc, repo := newTestService(t)
+	draft := `"$schema":"https://json-schema.org/draft/2020-12/schema"`
+	tgt := staticFile("don/T.schema.json", `{`+draft+`,"$id":"https://schemas.example.org/T","title":"T","type":"object"}`)
+	src := staticFile("don/S.schema.json", `{`+draft+`,"$id":"https://schemas.example.org/S","title":"S","type":"object","properties":{"t":{"$ref":"https://schemas.example.org/T"}}}`)
+	ctx := context.Background()
+	_, err := svc.HarvestStaticSchemas(ctx, models.StaticHarvest{
+		BaseURL: staticBase, Files: []models.StaticSchemaFile{tgt, src}, ListedURLs: []string{tgt.URL, src.URL}, Complete: true,
+	})
+	require.NoError(t, err)
+	require.Len(t, schemaByTitle(t, repo, "T").SourceMetaDependencyDetails, 1)
+
+	_, err = svc.HarvestStaticSchemas(ctx, models.StaticHarvest{
+		BaseURL: staticBase, Files: []models.StaticSchemaFile{tgt}, ListedURLs: []string{tgt.URL}, Complete: true,
+	})
+	require.NoError(t, err)
+	require.Empty(t, schemaByTitle(t, repo, "T").SourceMetaDependencyDetails)
 }
