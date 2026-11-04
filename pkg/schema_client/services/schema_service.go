@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"reflect"
 	"sort"
@@ -459,29 +460,11 @@ func (s *SchemaService) refreshAnalysisAndPublish(ctx context.Context, raws map[
 // wordt de grootte uit de content afgeleid (of, voor geharveste schemas, de
 // eerder vastgelegde bestandsgrootte behouden).
 func (s *SchemaService) runAnalysis(ctx context.Context, raws map[string][]byte) ([]models.Schema, error) {
-	all, err := s.repo.AllSchemas(ctx)
+	all, byKey, lookup, err := s.analysisIndex(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	// Lookup op identifier, schemaUrl en absolute $id (zonder fragment).
-	// Sorteer op id zodat sleutelbotsingen deterministisch worden opgelost.
-	sort.SliceStable(all, func(a, b int) bool { return all[a].Id < all[b].Id })
-	byKey := make(map[string]models.Schema, len(all)*3)
-	for _, schema := range all {
-		for _, key := range analysisKeys(schema) {
-			if _, exists := byKey[key]; !exists {
-				byKey[key] = schema
-			}
-		}
-	}
-	lookup := func(uri string) (map[string]any, bool) {
-		schema, ok := byKey[strings.TrimSpace(uri)]
-		if !ok || schema.Content == nil {
-			return nil, false
-		}
-		return schema.Content, true
-	}
+	bundledURLTemplate := bundleURLTemplate()
 
 	results := make([]schemaanalysis.Result, len(all))
 	type incomingEdge struct {
@@ -538,6 +521,7 @@ func (s *SchemaService) runAnalysis(ctx context.Context, raws map[string][]byte)
 		next.SourceMetaBytesBundled = res.BytesBundled
 		next.SourceMetaBaseDialect = res.BaseDialect
 		next.SourceMetaDialect = res.Dialect
+		next.SourceMetaBundledUrl = strings.ReplaceAll(bundledURLTemplate, "{id}", url.PathEscape(schema.Id))
 
 		if !analysisChanged(schema, next) {
 			continue
@@ -548,6 +532,67 @@ func (s *SchemaService) runAnalysis(ctx context.Context, raws map[string][]byte)
 		changed = append(changed, next)
 	}
 	return changed, nil
+}
+
+// analysisIndex haalt alle schemas op (gesorteerd op id) en bouwt de lookup op
+// identifier, schemaUrl en absolute $id (zonder fragment). Sleutelbotsingen
+// worden deterministisch opgelost: het schema met de laagste id wint.
+func (s *SchemaService) analysisIndex(ctx context.Context) ([]models.Schema, map[string]models.Schema, schemaanalysis.Lookup, error) {
+	all, err := s.repo.AllSchemas(ctx)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	sort.SliceStable(all, func(a, b int) bool { return all[a].Id < all[b].Id })
+	byKey := make(map[string]models.Schema, len(all)*3)
+	for _, schema := range all {
+		for _, key := range analysisKeys(schema) {
+			if _, exists := byKey[key]; !exists {
+				byKey[key] = schema
+			}
+		}
+	}
+	lookup := func(uri string) (map[string]any, bool) {
+		schema, ok := byKey[strings.TrimSpace(uri)]
+		if !ok || schema.Content == nil {
+			return nil, false
+		}
+		return schema.Content, true
+	}
+	return all, byKey, lookup, nil
+}
+
+// analysisLookup geeft dezelfde register-lookup als de analyse gebruikt.
+func (s *SchemaService) analysisLookup(ctx context.Context) (schemaanalysis.Lookup, error) {
+	_, _, lookup, err := s.analysisIndex(ctx)
+	return lookup, err
+}
+
+// BundleSchema geeft het gebundelde schema (alle transitieve refs binnen het
+// register ingevoegd onder $defs). Geeft nil, nil bij een onbekend id.
+func (s *SchemaService) BundleSchema(ctx context.Context, id string) (map[string]any, error) {
+	schema, err := s.RetrieveSchemaModel(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if schema == nil || len(schema.Content) == 0 {
+		return nil, nil
+	}
+	lookup, err := s.analysisLookup(ctx)
+	if err != nil {
+		return nil, err
+	}
+	base := schemaanalysis.BaseURI(schema.Content, schema.SchemaUrl)
+	bundle, _ := schemaanalysis.Bundle(schema.Content, base, lookup)
+	return bundle, nil
+}
+
+// bundleURLTemplate geeft het publieke URL-sjabloon voor gebundelde schemas;
+// {id} wordt per schema vervangen.
+func bundleURLTemplate() string {
+	if t := strings.TrimSpace(os.Getenv("SCHEMA_BUNDLE_URL_TEMPLATE")); t != "" {
+		return t
+	}
+	return "https://schemas.developer.overheid.nl/schemas/download/{id}/bundle.json"
 }
 
 // enrichDependencyEdge zet From* op het werkelijke bronschema en To* via de
@@ -588,6 +633,7 @@ func analysisChanged(a, b models.Schema) bool {
 		a.SourceMetaBytesBundled != b.SourceMetaBytesBundled ||
 		a.SourceMetaBaseDialect != b.SourceMetaBaseDialect ||
 		a.SourceMetaDialect != b.SourceMetaDialect ||
+		a.SourceMetaBundledUrl != b.SourceMetaBundledUrl ||
 		!(len(a.SourceMetaDependencyDetails) == 0 && len(b.SourceMetaDependencyDetails) == 0) &&
 			!reflect.DeepEqual(a.SourceMetaDependencyDetails, b.SourceMetaDependencyDetails) ||
 		!(len(a.SourceMetaHealthIssues) == 0 && len(b.SourceMetaHealthIssues) == 0) &&

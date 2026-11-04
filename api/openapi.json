@@ -271,6 +271,46 @@
         ]
       }
     },
+    "/schemas/{id}/bundle.json": {
+      "get": {
+        "tags": [
+          "Public endpoints",
+          "Schemas"
+        ],
+        "summary": "Get bundled schema content",
+        "description": "Returns the JSON Schema document with all transitively referenced schemas from the register embedded under $defs (definitions for draft-04/06/07). $id and $ref values are left unchanged.",
+        "operationId": "getSchemaBundle",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ResourceId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "API-Version": {
+                "$ref": "#/components/headers/APIVersion"
+              }
+            },
+            "content": {
+              "application/schema+json": {
+                "schema": {
+                  "type": "object",
+                  "description": "The bundled JSON Schema document"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/schemas/{id}/schema.json": {
       "get": {
         "tags": [

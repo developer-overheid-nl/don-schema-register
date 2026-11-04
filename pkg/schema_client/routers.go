@@ -124,6 +124,7 @@ func NewRouter(apiVersion string, controller *handler.SchemaController) *fizz.Fi
 	// Raw schema-inhoud; geregistreerd op de onderliggende engine zodat de
 	// handler zelf de content type (application/schema+json) kan bepalen.
 	g.GET("/v1/schemas/:id/schema.json", controller.RetrieveSchemaContent)
+	g.GET("/v1/schemas/:id/bundle.json", controller.RetrieveSchemaBundle)
 
 	// OpenAPI documentatie
 	g.StaticFile("/v1/openapi.json", "./api/openapi.json")

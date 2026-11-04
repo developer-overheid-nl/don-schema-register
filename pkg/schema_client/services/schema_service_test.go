@@ -784,3 +784,29 @@ func TestHarvestDropsIncomingEdgesOfDeletedSchemas(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, schemaByTitle(t, repo, "T").SourceMetaDependencyDetails)
 }
+
+func TestRefreshAnalysisSetsBundledURL(t *testing.T) {
+	t.Setenv("SCHEMA_BUNDLE_URL_TEMPLATE", "https://x/{id}/b.json")
+	svc, repo := newTestService(t)
+	harvestOne(t, svc, "don/A.schema.json",
+		`{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://schemas.example.org/don/A","title":"A","type":"object"}`)
+	a := schemaByTitle(t, repo, "A")
+	require.Equal(t, "https://x/"+a.Id+"/b.json", a.SourceMetaBundledUrl)
+}
+
+func TestBundleSchema(t *testing.T) {
+	svc, repo := newTestService(t)
+	base := "https://schemas.example.org/don/"
+	draft := `"$schema":"https://json-schema.org/draft/2020-12/schema"`
+	harvestOne(t, svc, "don/Organisation.schema.json", `{`+draft+`,"$id":"`+base+`Organisation","title":"Organisation","type":"object"}`)
+	harvestOne(t, svc, "don/Api.schema.json", `{`+draft+`,"$id":"`+base+`Api","title":"Api","type":"object","properties":{"o":{"$ref":"`+base+`Organisation"}}}`)
+	api := schemaByTitle(t, repo, "Api")
+
+	bundle, err := svc.BundleSchema(context.Background(), api.Id)
+	require.NoError(t, err)
+	require.Contains(t, bundle["$defs"], base+"Organisation")
+
+	missing, err := svc.BundleSchema(context.Background(), "bestaat-niet")
+	require.NoError(t, err)
+	require.Nil(t, missing)
+}
