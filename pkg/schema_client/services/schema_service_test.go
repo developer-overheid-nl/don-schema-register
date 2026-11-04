@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	httpclient "github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/helpers/httpclient"
@@ -809,4 +810,103 @@ func TestBundleSchema(t *testing.T) {
 	missing, err := svc.BundleSchema(context.Background(), "bestaat-niet")
 	require.NoError(t, err)
 	require.Nil(t, missing)
+}
+
+type allSchemasCountingRepo struct {
+	schemas.SchemasRepository
+	allSchemasCalls int
+}
+
+func (c *allSchemasCountingRepo) AllSchemas(ctx context.Context) ([]models.Schema, error) {
+	c.allSchemasCalls++
+	return c.SchemasRepository.AllSchemas(ctx)
+}
+
+func TestRefreshChangedSchemasRunsAnalysisOnce(t *testing.T) {
+	_, repo := newTestService(t)
+	counting := &allSchemasCountingRepo{SchemasRepository: repo}
+	svc := services.NewSchemaService(counting)
+	org := createTestOrg(t, svc)
+
+	version := "1"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/schema+json")
+		_, _ = w.Write([]byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"` + strings.TrimPrefix(r.URL.Path, "/") + ` v` + version + `","type":"object"}`))
+	}))
+	defer server.Close()
+	for _, p := range []string{"/a", "/b", "/c"} {
+		_, err := svc.CreateSchemaFromInput(models.SchemaPost{
+			SchemaUrl: server.URL + p, OrganisationUri: org.Uri, Contact: testContact(),
+		})
+		require.NoError(t, err)
+	}
+
+	version = "2"
+	counting.allSchemasCalls = 0
+	updated, err := svc.RefreshChangedSchemas(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 3, updated)
+	// Eén AllSchemas voor de refresh-loop en één voor de enkele analyse.
+	require.Equal(t, 2, counting.allSchemasCalls)
+}
+
+type failingRepo struct {
+	schemas.SchemasRepository
+	failSaveOn int // 1-based aanroep van SaveSchema die faalt; 0 = nooit
+	saveCalls  int
+	failDelete bool
+}
+
+func (f *failingRepo) SaveSchema(ctx context.Context, s *models.Schema) error {
+	f.saveCalls++
+	if f.failSaveOn > 0 && f.saveCalls == f.failSaveOn {
+		return errors.New("opslaan mislukt")
+	}
+	return f.SchemasRepository.SaveSchema(ctx, s)
+}
+
+func (f *failingRepo) DeleteSchema(ctx context.Context, id string) error {
+	if f.failDelete {
+		return errors.New("verwijderen mislukt")
+	}
+	return f.SchemasRepository.DeleteSchema(ctx, id)
+}
+
+func TestHarvestRefreshesAnalysisAfterSaveFailure(t *testing.T) {
+	_, repo := newTestService(t)
+	failing := &failingRepo{SchemasRepository: repo, failSaveOn: 3}
+	svc := services.NewSchemaService(failing)
+	draft := `"$schema":"https://json-schema.org/draft/2020-12/schema"`
+	b := staticFile("don/B.schema.json", `{`+draft+`,"$id":"https://schemas.example.org/B","title":"B","description":"d","type":"object"}`)
+	a := staticFile("don/A.schema.json", `{`+draft+`,"$id":"https://schemas.example.org/A","title":"A","description":"d","type":"object","properties":{"b":{"$ref":"https://schemas.example.org/B"}}}`)
+	c := staticFile("don/C.schema.json", `{`+draft+`,"$id":"https://schemas.example.org/C","title":"C","type":"object"}`)
+
+	count, err := svc.HarvestStaticSchemas(context.Background(), models.StaticHarvest{
+		BaseURL: staticBase, Files: []models.StaticSchemaFile{b, a, c},
+	})
+	require.Error(t, err)
+	require.Equal(t, 2, count)
+	sa := schemaByTitle(t, repo, "A")
+	require.Greater(t, sa.SourceMetaHealth, 0)
+	require.Greater(t, sa.SourceMetaBytes, 0)
+	require.Equal(t, 1, sa.SourceMetaDependencies)
+	require.NotEmpty(t, sa.SourceMetaBundledUrl)
+}
+
+func TestHarvestRefreshesAnalysisAfterDeleteFailure(t *testing.T) {
+	_, repo := newTestService(t)
+	failing := &failingRepo{SchemasRepository: repo}
+	svc := services.NewSchemaService(failing)
+	draft := `"$schema":"https://json-schema.org/draft/2020-12/schema"`
+	harvestOne(t, svc, "don/Oud.schema.json", `{`+draft+`,"$id":"https://schemas.example.org/Oud","title":"Oud","type":"object"}`)
+
+	failing.failDelete = true
+	a := staticFile("don/A.schema.json", `{`+draft+`,"$id":"https://schemas.example.org/A","title":"A","description":"d","type":"object"}`)
+	_, err := svc.HarvestStaticSchemas(context.Background(), models.StaticHarvest{
+		BaseURL: staticBase, Files: []models.StaticSchemaFile{a}, ListedURLs: []string{a.URL}, Complete: true,
+	})
+	require.Error(t, err)
+	sa := schemaByTitle(t, repo, "A")
+	require.Greater(t, sa.SourceMetaHealth, 0)
+	require.Equal(t, len(a.Raw), sa.SourceMetaBytes)
 }

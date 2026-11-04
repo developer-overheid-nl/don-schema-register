@@ -195,11 +195,27 @@ func (s *SchemaService) UpdateSchemaFromInput(ctx context.Context, body *models.
 }
 
 func (s *SchemaService) applySchemaUpdate(ctx context.Context, schema *models.Schema, request models.SchemaPost, res *jsonschema.SchemaResult) (*models.SchemaSummary, error) {
+	if err := s.saveSchemaUpdate(ctx, schema, request, res); err != nil {
+		return nil, err
+	}
+
+	s.refreshAnalysisAndPublish(ctx, nil, *schema)
+	if fresh, err := s.repo.GetSchemaByID(ctx, schema.Id); err == nil && fresh != nil {
+		schema = fresh
+	}
+
+	updated := util.ToSchemaSummary(schema)
+	return &updated, nil
+}
+
+// saveSchemaUpdate valideert en bewaart een bijgewerkt schema zonder de analyse
+// te draaien; de aanroeper is verantwoordelijk voor de analyse.
+func (s *SchemaService) saveSchemaUpdate(ctx context.Context, schema *models.Schema, request models.SchemaPost, res *jsonschema.SchemaResult) error {
 	if schema == nil {
-		return nil, fmt.Errorf("schema ontbreekt")
+		return fmt.Errorf("schema ontbreekt")
 	}
 	if res == nil {
-		return nil, fmt.Errorf("schema resultaat ontbreekt")
+		return fmt.Errorf("schema resultaat ontbreekt")
 	}
 
 	orgLabel := ""
@@ -217,23 +233,13 @@ func (s *SchemaService) applySchemaUpdate(ctx context.Context, schema *models.Sc
 		schema.OrganisationID = &schema.Organisation.Uri
 	}
 	if invalids := jsonschema.ValidateSchema(schema); len(invalids) > 0 {
-		return nil, problem.NewBadRequest(
+		return problem.NewBadRequest(
 			"Validatie mislukt: ontbrekende of ongeldige eigenschappen",
 			invalids...,
 		)
 	}
 
-	if err := s.repo.UpdateSchema(ctx, schema); err != nil {
-		return nil, err
-	}
-
-	s.refreshAnalysisAndPublish(ctx, nil, *schema)
-	if fresh, err := s.repo.GetSchemaByID(ctx, schema.Id); err == nil && fresh != nil {
-		schema = fresh
-	}
-
-	updated := util.ToSchemaSummary(schema)
-	return &updated, nil
+	return s.repo.UpdateSchema(ctx, schema)
 }
 
 // RefreshChangedSchemas haalt alle geregistreerde schemas met een schemaUrl
@@ -246,6 +252,7 @@ func (s *SchemaService) RefreshChangedSchemas(ctx context.Context) (int, error) 
 	}
 
 	var updated int
+	var changedSchemas []models.Schema
 	for _, candidate := range allSchemas {
 		if err := ctx.Err(); err != nil {
 			return updated, err
@@ -280,16 +287,18 @@ func (s *SchemaService) RefreshChangedSchemas(ctx context.Context) (int, error) 
 				Email: schema.ContactEmail,
 			},
 		}
-		if _, err := s.applySchemaUpdate(ctx, &schema, request, res); err != nil {
+		// Analyse draait eenmalig aan het einde van de refresh.
+		if err := s.saveSchemaUpdate(ctx, &schema, request, res); err != nil {
 			log.Printf("[refresh] schema=%s bijwerken mislukt: %v", schema.Id, err)
 			continue
 		}
+		changedSchemas = append(changedSchemas, schema)
 		updated++
 	}
 	if updated > 0 {
-		if err := s.RefreshAnalysis(ctx); err != nil {
-			log.Printf("[refresh] analyse mislukt: %v", err)
-		}
+		// Eén analyse voor alle bijgewerkte schemas; publiceert ze daarna met
+		// de nieuwste analysevelden.
+		s.refreshAnalysisAndPublish(ctx, nil, changedSchemas...)
 	}
 	return updated, nil
 }
@@ -297,7 +306,7 @@ func (s *SchemaService) RefreshChangedSchemas(ctx context.Context) (int, error) 
 // HarvestStaticSchemas slaat de uit don-static opgehaalde schemabestanden op en
 // verwijdert (alleen bij een complete harvest) eerder geharveste schemas waarvan
 // het bestand niet meer in de listing voorkomt.
-func (s *SchemaService) HarvestStaticSchemas(ctx context.Context, harvest models.StaticHarvest) (int, error) {
+func (s *SchemaService) HarvestStaticSchemas(ctx context.Context, harvest models.StaticHarvest) (stored int, err error) {
 	baseURL := strings.TrimSpace(harvest.BaseURL)
 	if baseURL == "" {
 		baseURL = defaultStaticBaseURL
@@ -306,12 +315,25 @@ func (s *SchemaService) HarvestStaticSchemas(ctx context.Context, harvest models
 		baseURL += "/"
 	}
 
-	var stored int
 	now := time.Now()
 	storedSchemas := make([]*models.Schema, 0, len(harvest.Files))
 	raws := make(map[string][]byte, len(harvest.Files))
+
+	// SaveSchema schrijft de rij zonder analysevelden; draai de analyse daarom
+	// op elk uitstappad nadat minstens één schema is opgeslagen (behalve bij
+	// een geannuleerde context).
+	defer func() {
+		if len(storedSchemas) == 0 || ctx.Err() != nil {
+			return
+		}
+		primary := make([]models.Schema, 0, len(storedSchemas))
+		for _, schema := range storedSchemas {
+			primary = append(primary, *schema)
+		}
+		s.refreshAnalysisAndPublish(ctx, raws, primary...)
+	}()
 	for _, file := range harvest.Files {
-		if err := ctx.Err(); err != nil {
+		if err = ctx.Err(); err != nil {
 			return stored, err
 		}
 		fileURL := strings.TrimSpace(file.URL)
@@ -346,7 +368,7 @@ func (s *SchemaService) HarvestStaticSchemas(ctx context.Context, harvest models
 			SourceMetaIdentifier: fileURL,
 			LastCrawledAt:        now,
 		}
-		if err := s.repo.SaveSchema(ctx, schema); err != nil {
+		if err = s.repo.SaveSchema(ctx, schema); err != nil {
 			return stored, err
 		}
 		storedSchemas = append(storedSchemas, schema)
@@ -357,16 +379,11 @@ func (s *SchemaService) HarvestStaticSchemas(ctx context.Context, harvest models
 	if harvest.Complete && len(harvest.ListedURLs) == 0 {
 		log.Printf("[static] waarschuwing: complete harvest zonder bestanden; niets verwijderd")
 	} else if harvest.Complete {
-		if err := s.deleteVanishedStaticSchemas(ctx, harvest.ListedURLs); err != nil {
+		if err = s.deleteVanishedStaticSchemas(ctx, harvest.ListedURLs); err != nil {
 			return stored, err
 		}
 	}
 
-	primary := make([]models.Schema, 0, len(storedSchemas))
-	for _, schema := range storedSchemas {
-		primary = append(primary, *schema)
-	}
-	s.refreshAnalysisAndPublish(ctx, raws, primary...)
 	return stored, nil
 }
 
@@ -638,29 +655,6 @@ func analysisChanged(a, b models.Schema) bool {
 			!reflect.DeepEqual(a.SourceMetaDependencyDetails, b.SourceMetaDependencyDetails) ||
 		!(len(a.SourceMetaHealthIssues) == 0 && len(b.SourceMetaHealthIssues) == 0) &&
 			!reflect.DeepEqual(a.SourceMetaHealthIssues, b.SourceMetaHealthIssues)
-}
-
-func enrichSourceMetaDependencies(
-	dependencies []models.SourceMetaDependency,
-	bySourceMetaIdentifier map[string]models.Schema,
-) ([]models.SourceMetaDependency, bool) {
-	enriched := make([]models.SourceMetaDependency, len(dependencies))
-	changed := false
-	for i, dependency := range dependencies {
-		next := dependency
-
-		fromSchema, hasFromSchema := bySourceMetaIdentifier[strings.TrimSpace(dependency.From)]
-		var dependencyChanged bool
-		next, dependencyChanged = withSourceMetaDependencySchema(next, "from", fromSchema, hasFromSchema)
-		changed = dependencyChanged || changed
-
-		toSchema, hasToSchema := bySourceMetaIdentifier[strings.TrimSpace(dependency.To)]
-		next, dependencyChanged = withSourceMetaDependencySchema(next, "to", toSchema, hasToSchema)
-		changed = dependencyChanged || changed
-
-		enriched[i] = next
-	}
-	return enriched, changed
 }
 
 func withSourceMetaDependencySchema(

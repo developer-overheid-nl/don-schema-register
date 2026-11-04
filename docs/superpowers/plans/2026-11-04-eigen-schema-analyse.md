@@ -33,6 +33,8 @@
 
 ### Task 1: Refs, bytes en dialect
 
+> Let op: de bytegroottes zijn later aangepast (latere beslissing): `Bytes` = `len(raw)` van het originele bestand, `BytesBundled` = `len(MarshalIndent(bundle))`; `CompactBytes` is vervallen.
+
 **Files:**
 - Create: `pkg/schema_client/helpers/schemaanalysis/refs.go`
 - Test: `pkg/schema_client/helpers/schemaanalysis/refs_test.go`
@@ -113,6 +115,8 @@ Score = round(100 × som gewichten van regels zonder issue / som van alle toepas
 - [ ] **Step 5: Commit** `feat: eigen health-regels voor schemas`
 
 ### Task 4: Analyse van één schema
+
+> Let op: de bytegroottes zijn later aangepast (latere beslissing): `Bytes` = `len(raw)` van het originele bestand, `BytesBundled` = `len(MarshalIndent(bundle))`; `CompactBytes` is vervallen.
 
 **Files:**
 - Create: `pkg/schema_client/helpers/schemaanalysis/analyze.go`

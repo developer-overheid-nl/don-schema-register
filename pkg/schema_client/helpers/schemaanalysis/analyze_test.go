@@ -84,3 +84,38 @@ func TestAnalyzeUnresolvedAndEmptyRaw(t *testing.T) {
 	}
 	assert.True(t, found)
 }
+
+func TestAnalyzeIgnoresUnresolvedRefsOfDependencies(t *testing.T) {
+	const base = "https://schemas.example.org/"
+	a := map[string]any{
+		"$id": base + "A", "title": "A", "type": "object",
+		"properties": map[string]any{"b": map[string]any{"$ref": base + "B"}},
+	}
+	b := map[string]any{
+		"$id": base + "B", "title": "B", "type": "object",
+		"properties": map[string]any{"x": map[string]any{"$ref": base + "Onbekend"}},
+	}
+	lookup := func(uri string) (map[string]any, bool) {
+		if uri == base+"B" {
+			return b, true
+		}
+		return nil, false
+	}
+	hasUnresolved := func(res Result) bool {
+		for _, i := range res.HealthIssues {
+			if i.Name == "unresolved_refs" {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Een onoplosbare ref in een dependency is niet de schuld van A.
+	assert.False(t, hasUnresolved(Analyze(a, nil, base+"A", lookup)))
+	// B zelf heeft de onoplosbare ref wel.
+	assert.True(t, hasUnresolved(Analyze(b, nil, base+"B", lookup)))
+
+	// A met een eigen onoplosbare ref blijft de issue houden.
+	a["properties"].(map[string]any)["y"] = map[string]any{"$ref": base + "Weg"}
+	assert.True(t, hasUnresolved(Analyze(a, nil, base+"A", lookup)))
+}

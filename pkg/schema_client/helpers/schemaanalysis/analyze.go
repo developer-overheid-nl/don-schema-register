@@ -28,12 +28,19 @@ func Analyze(content map[string]any, raw []byte, schemaURL string, lookup Lookup
 
 	var res Result
 	unique := map[string]bool{}
+	// Health krijgt alleen de onoplosbare refs van het root-schema: de At van
+	// refs in ingebedde dependencies is relatief aan die dependency.
+	var unresolved []Ref
 	for _, ref := range ExternalRefs(content, base) {
 		to := ref.Target
 		if to == "" {
 			to = ref.Raw
+			unresolved = append(unresolved, ref)
 		} else {
 			unique[to] = true
+			if _, ok := lookup(to); !ok && to != base {
+				unresolved = append(unresolved, ref)
+			}
 		}
 		res.Dependencies = append(res.Dependencies, models.SourceMetaDependency{
 			From: base, To: to, At: ref.At,
@@ -41,7 +48,7 @@ func Analyze(content map[string]any, raw []byte, schemaURL string, lookup Lookup
 	}
 	res.DependencyCount = len(unique)
 
-	bundle, unresolved := Bundle(content, base, lookup)
+	bundle, _ := Bundle(content, base, lookup)
 	res.Health, res.HealthIssues = Health(content, schemaURL, unresolved)
 
 	if len(raw) > 0 {
