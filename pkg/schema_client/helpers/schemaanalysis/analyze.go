@@ -20,8 +20,9 @@ type Result struct {
 }
 
 // Analyze combineert refs, bundel en health tot één resultaat. raw is de
-// originele inhoud (voor de bytegrootte); is die leeg, dan wordt de grootte
-// van de compacte marshal van content gebruikt.
+// originele inhoud zoals geserveerd (Bytes = len(raw)); is die leeg, dan wordt
+// de lengte van de ingesprongen marshal van content gebruikt. BytesBundled is
+// de lengte van de ingesprongen bundel, zoals de bundle-endpoint die serveert.
 func Analyze(content map[string]any, raw []byte, schemaURL string, lookup Lookup) Result {
 	base := BaseURI(content, schemaURL)
 
@@ -44,11 +45,11 @@ func Analyze(content map[string]any, raw []byte, schemaURL string, lookup Lookup
 	res.Health, res.HealthIssues = Health(content, schemaURL, unresolved)
 
 	if len(raw) > 0 {
-		res.Bytes = CompactBytes(raw)
-	} else if b, err := json.Marshal(content); err == nil {
+		res.Bytes = len(raw)
+	} else if b, err := json.MarshalIndent(content, "", "  "); err == nil {
 		res.Bytes = len(b)
 	}
-	if b, err := json.Marshal(bundle); err == nil {
+	if b, err := json.MarshalIndent(bundle, "", "  "); err == nil {
 		res.BytesBundled = len(b)
 	}
 

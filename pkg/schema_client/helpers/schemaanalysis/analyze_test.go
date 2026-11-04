@@ -55,11 +55,13 @@ func TestAnalyzeApiSchema(t *testing.T) {
 	assert.Equal(t, base+"Organisation.schema.json", tos["/properties/organisation/$ref"])
 	assert.Equal(t, base+"ApiLifecycle.schema.json", tos["/properties/lifecycle/$ref"])
 	assert.Equal(t, 2, res.DependencyCount)
-	assert.Greater(t, res.Bytes, 0)
+	assert.Equal(t, len(raw), res.Bytes)
 	assert.Greater(t, res.BytesBundled, res.Bytes)
+	bundle, _ := Bundle(api, base+"Api.schema.json", lookup)
+	bb, _ := json.MarshalIndent(bundle, "", "  ")
+	assert.Equal(t, len(bb), res.BytesBundled)
 	assert.Equal(t, dialect, res.Dialect)
 	assert.Equal(t, dialect, res.BaseDialect)
-	assert.NotContains(t, res.HealthIssues, "unresolved_refs")
 	for _, i := range res.HealthIssues {
 		assert.NotEqual(t, "unresolved_refs", i.Name)
 	}
@@ -74,7 +76,7 @@ func TestAnalyzeUnresolvedAndEmptyRaw(t *testing.T) {
 	require.Len(t, res.Dependencies, 1)
 	assert.Equal(t, "https://example.com/missing.json", res.Dependencies[0].To)
 	assert.Equal(t, 1, res.DependencyCount)
-	b, _ := json.Marshal(content)
+	b, _ := json.MarshalIndent(content, "", "  ")
 	assert.Equal(t, len(b), res.Bytes)
 	found := false
 	for _, i := range res.HealthIssues {

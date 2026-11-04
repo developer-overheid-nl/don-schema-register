@@ -73,16 +73,6 @@ func resolveTarget(raw string, base *url.URL) string {
 	return u.String()
 }
 
-// CompactBytes geeft de lengte van het gecomprimeerde JSON; bij een fout de
-// lengte van de invoer.
-func CompactBytes(raw []byte) int {
-	var buf bytes.Buffer
-	if err := json.Compact(&buf, raw); err != nil {
-		return len(raw)
-	}
-	return buf.Len()
-}
-
 // BaseURI geeft $id als die absoluut is, anders fallback.
 func BaseURI(content map[string]any, fallback string) string {
 	if id, ok := content["$id"].(string); ok {

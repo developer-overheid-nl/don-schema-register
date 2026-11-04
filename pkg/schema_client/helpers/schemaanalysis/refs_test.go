@@ -55,11 +55,6 @@ func TestExternalRefsWalksArraysAndEscapesPointer(t *testing.T) {
 	assert.Equal(t, "/properties/a~1b/$ref", refs[1].At)
 }
 
-func TestCompactBytes(t *testing.T) {
-	assert.Equal(t, 7, CompactBytes([]byte("{ \"a\": 1 }")))
-	assert.Equal(t, 3, CompactBytes([]byte("{{{")))
-}
-
 func TestBaseURI(t *testing.T) {
 	assert.Equal(t, "https://x.nl/a.json", BaseURI(map[string]any{"$id": "https://x.nl/a.json"}, "fb"))
 	assert.Equal(t, "fb", BaseURI(map[string]any{"$id": "a.json"}, "fb"))
