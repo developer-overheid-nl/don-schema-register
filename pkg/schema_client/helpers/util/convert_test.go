@@ -25,7 +25,7 @@ func TestToSchemaSummaryAndDetail(t *testing.T) {
 		OrganisationID: &orgURI,
 		Organisation:   &models.Organisation{Uri: orgURI, Label: "Example Org"},
 		Content:        map[string]any{"type": "object"},
-		SourceMetaDependencyDetails: []models.SourceMetaDependency{
+		Dependencies: []models.Dependency{
 			{
 				From:            "https://schemas.example.org/schema",
 				To:              "https://schemas.example.org/shared/link",
@@ -63,14 +63,14 @@ func TestToSchemaSummaryAndDetail(t *testing.T) {
 	if detail.Content["type"] != "object" {
 		t.Fatalf("detail content = %#v, want schema content", detail.Content)
 	}
-	if len(detail.SourceMetaDependencyDetails) != 1 {
-		t.Fatalf("detail SourceMetaDependencyDetails = %#v, want one dependency", detail.SourceMetaDependencyDetails)
+	if len(detail.Dependencies) != 1 {
+		t.Fatalf("detail Dependencies = %#v, want one dependency", detail.Dependencies)
 	}
-	if detail.SourceMetaDependencyDetails[0].To != "https://schemas.example.org/shared/link" {
-		t.Fatalf("detail SourceMetaDependencyDetails[0].To = %q", detail.SourceMetaDependencyDetails[0].To)
+	if detail.Dependencies[0].To != "https://schemas.example.org/shared/link" {
+		t.Fatalf("detail Dependencies[0].To = %q", detail.Dependencies[0].To)
 	}
-	if detail.SourceMetaDependencyDetails[0].ToSchemaId != "schema-2" {
-		t.Fatalf("detail SourceMetaDependencyDetails[0].ToSchemaId = %q", detail.SourceMetaDependencyDetails[0].ToSchemaId)
+	if detail.Dependencies[0].ToSchemaId != "schema-2" {
+		t.Fatalf("detail Dependencies[0].ToSchemaId = %q", detail.Dependencies[0].ToSchemaId)
 	}
 }
 

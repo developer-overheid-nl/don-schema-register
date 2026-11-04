@@ -32,19 +32,19 @@ func seedTestSchemas(t *testing.T, repo SchemasRepository) *models.Organisation 
 		{
 			Id: "a", Title: "Adres", Dialect: "2020-12", RootType: "object",
 			OrganisationID: &org.Uri, Hash: "hash-a",
-			SourceMetaPath: "api-register/demo/adres", SourceMetaRoot: "api-register",
+			Path: "api-register/demo/adres", Collection: "api-register",
 			Content: map[string]any{"type": "object"},
 		},
 		{
 			Id: "b", Title: "Bier", Description: "Een bier", Dialect: "2020-12", RootType: "object",
 			OrganisationID: &org.Uri, Hash: "hash-b",
-			SourceMetaPath: "api-register/demo/bier", SourceMetaRoot: "api-register",
+			Path: "api-register/demo/bier", Collection: "api-register",
 			Content: map[string]any{"type": "object"},
 		},
 		{
 			Id: "c", Title: "Percentage", Dialect: "oas-3.1", RootType: "number",
 			OrganisationID: &org.Uri, Hash: "hash-c",
-			SourceMetaPath: "demo/percentage", SourceMetaRoot: "demo",
+			Path: "demo/percentage", Collection: "demo",
 			Content: map[string]any{"type": "number"},
 		},
 	} {
@@ -215,23 +215,23 @@ func TestSaveSchemaIdempotentOnURL(t *testing.T) {
 	require.Len(t, all, 1)
 }
 
-func TestSaveSchemaIdempotentOnSourceMetaIdentifier(t *testing.T) {
+func TestSaveSchemaIdempotentOnSourceUrl(t *testing.T) {
 	repo := newTestRepo(t)
 	ctx := context.Background()
 
 	first := &models.Schema{
-		Id:                   "x",
-		Title:                "Eerste",
-		SourceMetaIdentifier: "https://schemas.example.org/schema",
-		SourceMetaHealth:     80,
+		Id:        "x",
+		Title:     "Eerste",
+		SourceUrl: "https://schemas.example.org/schema",
+		Health:    80,
 	}
 	require.NoError(t, repo.SaveSchema(ctx, first))
 
 	second := &models.Schema{
-		Id:                   "y",
-		Title:                "Tweede",
-		SourceMetaIdentifier: "https://schemas.example.org/schema",
-		SourceMetaHealth:     90,
+		Id:        "y",
+		Title:     "Tweede",
+		SourceUrl: "https://schemas.example.org/schema",
+		Health:    90,
 	}
 	require.NoError(t, repo.SaveSchema(ctx, second))
 	require.Equal(t, "x", second.Id)
@@ -240,36 +240,10 @@ func TestSaveSchemaIdempotentOnSourceMetaIdentifier(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, all, 1)
 	require.Equal(t, "Tweede", all[0].Title)
-	require.Equal(t, 90, all[0].SourceMetaHealth)
+	require.Equal(t, 90, all[0].Health)
 }
 
-func TestSaveSchemaMigratesLegacySourceMetaID(t *testing.T) {
-	repo := newTestRepo(t)
-	ctx := context.Background()
-
-	first := &models.Schema{
-		Id:                   "source-meta-06aaddfcede69a1f",
-		Title:                "Legacy",
-		SourceMetaIdentifier: "https://schemas.example.org/schema",
-	}
-	require.NoError(t, repo.SaveSchema(ctx, first))
-
-	second := &models.Schema{
-		Id:                   "opaque-id",
-		Title:                "Nieuwe ID",
-		SourceMetaIdentifier: "https://schemas.example.org/schema",
-	}
-	require.NoError(t, repo.SaveSchema(ctx, second))
-	require.Equal(t, "opaque-id", second.Id)
-
-	all, err := repo.AllSchemas(ctx)
-	require.NoError(t, err)
-	require.Len(t, all, 1)
-	require.Equal(t, "opaque-id", all[0].Id)
-	require.Equal(t, "Nieuwe ID", all[0].Title)
-}
-
-func TestSaveSourceMetaSchemaDoesNotOverwriteManualSchemaByURL(t *testing.T) {
+func TestSaveHarvestedSchemaDoesNotOverwriteManualSchemaByURL(t *testing.T) {
 	repo := newTestRepo(t)
 	ctx := context.Background()
 
@@ -282,14 +256,14 @@ func TestSaveSourceMetaSchemaDoesNotOverwriteManualSchemaByURL(t *testing.T) {
 	}
 	require.NoError(t, repo.SaveSchema(ctx, manual))
 
-	sourceMeta := &models.Schema{
-		Id:                   "source-meta",
-		Title:                "SourceMeta",
-		SchemaUrl:            "https://schemas.example.org/schema",
-		SourceMetaIdentifier: "https://schemas.example.org/schema",
-		SourceMetaHealth:     90,
+	harvested := &models.Schema{
+		Id:        "harvested",
+		Title:     "Geharvest",
+		SchemaUrl: "https://schemas.example.org/schema",
+		SourceUrl: "https://schemas.example.org/schema",
+		Health:    90,
 	}
-	require.NoError(t, repo.SaveSchema(ctx, sourceMeta))
+	require.NoError(t, repo.SaveSchema(ctx, harvested))
 
 	all, err := repo.AllSchemas(ctx)
 	require.NoError(t, err)
@@ -347,4 +321,18 @@ func TestOrganisationsAndUpdateSchema(t *testing.T) {
 	updated, err := repo.GetSchemaByID(ctx, "a")
 	require.NoError(t, err)
 	require.Equal(t, "Adres v2", updated.Title)
+}
+
+func TestDeleteSchema(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+	require.NoError(t, repo.SaveSchema(ctx, &models.Schema{Id: "del-1", Title: "Weg"}))
+	require.NoError(t, repo.SaveSchema(ctx, &models.Schema{Id: "del-2", Title: "Blijft"}))
+
+	require.NoError(t, repo.DeleteSchema(ctx, "del-1"))
+
+	all, err := repo.AllSchemas(ctx)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	require.Equal(t, "del-2", all[0].Id)
 }

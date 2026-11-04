@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"reflect"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -17,6 +19,7 @@ import (
 	httpclient "github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/helpers/httpclient"
 	jsonschema "github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/helpers/jsonschema"
 	problem "github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/helpers/problem"
+	schemaanalysis "github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/helpers/schemaanalysis"
 	util "github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/helpers/util"
 	"github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/models"
 	"github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/schemas"
@@ -26,7 +29,8 @@ import (
 // fetchOrigin wordt als Origin-header meegestuurd bij het ophalen van schemas.
 const fetchOrigin = "https://developer.overheid.nl"
 
-const defaultSourceMetaPublicSchemaBaseURL = "https://static.developer.overheid.nl/schemas/"
+// defaultStaticBaseURL is de root van de originele schemabestanden in don-static.
+const defaultStaticBaseURL = "https://static.developer.overheid.nl/schemas/"
 
 // ErrNeedsPost geeft aan dat een PUT verwijst naar een schema dat (nog) niet
 // bestaat en via POST geregistreerd moet worden.
@@ -146,8 +150,10 @@ func (s *SchemaService) CreateSchemaFromInput(requestBody models.SchemaPost) (*m
 		return nil, problem.NewInternalServerError("kan schema niet opslaan: " + err.Error())
 	}
 
-	schemaCopy := *schema
-	go s.publishToTypesense(schemaCopy)
+	s.refreshAnalysisAndPublish(ctx, nil, *schema)
+	if fresh, err := s.repo.GetSchemaByID(ctx, schema.Id); err == nil && fresh != nil {
+		schema = fresh
+	}
 
 	created := util.ToSchemaSummary(schema)
 	return &created, nil
@@ -189,11 +195,27 @@ func (s *SchemaService) UpdateSchemaFromInput(ctx context.Context, body *models.
 }
 
 func (s *SchemaService) applySchemaUpdate(ctx context.Context, schema *models.Schema, request models.SchemaPost, res *jsonschema.SchemaResult) (*models.SchemaSummary, error) {
+	if err := s.saveSchemaUpdate(ctx, schema, request, res); err != nil {
+		return nil, err
+	}
+
+	s.refreshAnalysisAndPublish(ctx, nil, *schema)
+	if fresh, err := s.repo.GetSchemaByID(ctx, schema.Id); err == nil && fresh != nil {
+		schema = fresh
+	}
+
+	updated := util.ToSchemaSummary(schema)
+	return &updated, nil
+}
+
+// saveSchemaUpdate valideert en bewaart een bijgewerkt schema zonder de analyse
+// te draaien; de aanroeper is verantwoordelijk voor de analyse.
+func (s *SchemaService) saveSchemaUpdate(ctx context.Context, schema *models.Schema, request models.SchemaPost, res *jsonschema.SchemaResult) error {
 	if schema == nil {
-		return nil, fmt.Errorf("schema ontbreekt")
+		return fmt.Errorf("schema ontbreekt")
 	}
 	if res == nil {
-		return nil, fmt.Errorf("schema resultaat ontbreekt")
+		return fmt.Errorf("schema resultaat ontbreekt")
 	}
 
 	orgLabel := ""
@@ -211,21 +233,13 @@ func (s *SchemaService) applySchemaUpdate(ctx context.Context, schema *models.Sc
 		schema.OrganisationID = &schema.Organisation.Uri
 	}
 	if invalids := jsonschema.ValidateSchema(schema); len(invalids) > 0 {
-		return nil, problem.NewBadRequest(
+		return problem.NewBadRequest(
 			"Validatie mislukt: ontbrekende of ongeldige eigenschappen",
 			invalids...,
 		)
 	}
 
-	if err := s.repo.UpdateSchema(ctx, schema); err != nil {
-		return nil, err
-	}
-
-	schemaCopy := *schema
-	go s.publishToTypesense(schemaCopy)
-
-	updated := util.ToSchemaSummary(schema)
-	return &updated, nil
+	return s.repo.UpdateSchema(ctx, schema)
 }
 
 // RefreshChangedSchemas haalt alle geregistreerde schemas met een schemaUrl
@@ -238,6 +252,7 @@ func (s *SchemaService) RefreshChangedSchemas(ctx context.Context) (int, error) 
 	}
 
 	var updated int
+	var changedSchemas []models.Schema
 	for _, candidate := range allSchemas {
 		if err := ctx.Err(); err != nil {
 			return updated, err
@@ -246,7 +261,7 @@ func (s *SchemaService) RefreshChangedSchemas(ctx context.Context) (int, error) 
 		if schemaURL == "" {
 			continue
 		}
-		if strings.TrimSpace(candidate.SourceMetaIdentifier) != "" {
+		if strings.TrimSpace(candidate.SourceUrl) != "" {
 			continue
 		}
 
@@ -272,166 +287,383 @@ func (s *SchemaService) RefreshChangedSchemas(ctx context.Context) (int, error) 
 				Email: schema.ContactEmail,
 			},
 		}
-		if _, err := s.applySchemaUpdate(ctx, &schema, request, res); err != nil {
+		// Analyse draait eenmalig aan het einde van de refresh.
+		if err := s.saveSchemaUpdate(ctx, &schema, request, res); err != nil {
 			log.Printf("[refresh] schema=%s bijwerken mislukt: %v", schema.Id, err)
 			continue
 		}
+		changedSchemas = append(changedSchemas, schema)
 		updated++
+	}
+	if updated > 0 {
+		// Eén analyse voor alle bijgewerkte schemas; publiceert ze daarna met
+		// de nieuwste analysevelden.
+		s.refreshAnalysisAndPublish(ctx, nil, changedSchemas...)
 	}
 	return updated, nil
 }
 
-func (s *SchemaService) HarvestSourceMetaSchemas(ctx context.Context, entries []models.SourceMetaSchemaMetadata) (int, error) {
-	var stored int
+// HarvestStaticSchemas slaat de uit don-static opgehaalde schemabestanden op en
+// verwijdert (alleen bij een complete harvest) eerder geharveste schemas waarvan
+// het bestand niet meer in de listing voorkomt.
+func (s *SchemaService) HarvestStaticSchemas(ctx context.Context, harvest models.StaticHarvest) (stored int, err error) {
+	baseURL := strings.TrimSpace(harvest.BaseURL)
+	if baseURL == "" {
+		baseURL = defaultStaticBaseURL
+	}
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+
 	now := time.Now()
-	storedSchemas := make([]*models.Schema, 0, len(entries))
-	for _, entry := range entries {
-		if err := ctx.Err(); err != nil {
+	storedSchemas := make([]*models.Schema, 0, len(harvest.Files))
+	raws := make(map[string][]byte, len(harvest.Files))
+
+	// SaveSchema schrijft de rij zonder analysevelden; draai de analyse daarom
+	// op elk uitstappad nadat minstens één schema is opgeslagen (behalve bij
+	// een geannuleerde context).
+	defer func() {
+		if len(storedSchemas) == 0 || ctx.Err() != nil {
+			return
+		}
+		primary := make([]models.Schema, 0, len(storedSchemas))
+		for _, schema := range storedSchemas {
+			primary = append(primary, *schema)
+		}
+		s.refreshAnalysisAndPublish(ctx, raws, primary...)
+	}()
+	for _, file := range harvest.Files {
+		if err = ctx.Err(); err != nil {
 			return stored, err
 		}
-
-		identifier := strings.TrimSpace(entry.Identifier)
-		if identifier == "" {
+		fileURL := strings.TrimSpace(file.URL)
+		if fileURL == "" || len(file.Raw) == 0 {
 			continue
 		}
-		if len(entry.RawContent) == 0 {
-			log.Printf("[sourcemeta] schema %q overgeslagen: inhoud ontbreekt", identifier)
-			continue
-		}
-		res, err := jsonschema.ParseValidateAndHash(entry.RawContent, "application/schema+json")
+		res, err := jsonschema.ParseValidateAndHash(file.Raw, "application/schema+json")
 		if err != nil {
-			log.Printf("[sourcemeta] schema %q parsen mislukt: %v", identifier, err)
+			log.Printf("[static] schema %q parsen mislukt: %v", fileURL, err)
 			continue
 		}
 
-		sourceMetaPath := normalizeSourceMetaPath(entry.Path)
-		if sourceMetaPath == "" {
-			sourceMetaPath = normalizeSourceMetaPath(identifier)
+		relative := staticRelativePath(baseURL, fileURL)
+		name := path.Base(relative)
+		collection := ""
+		if idx := strings.Index(relative, "/"); idx >= 0 {
+			collection = relative[:idx]
 		}
-		sourceMetaRoot := sourceMetaRootFromPath(sourceMetaPath)
-		schemaURL := sourceMetaPublicSchemaURL(sourceMetaPath)
-		id := sourceMetaSchemaID(identifier)
 		schema := &models.Schema{
-			Id:                          id,
-			SchemaUrl:                   schemaURL,
-			Title:                       contentStringWithFallback(res.Content, "title", entry.Name, identifier),
-			Description:                 contentStringWithFallback(res.Content, "description", entry.Description),
-			Dialect:                     res.Dialect,
-			RootType:                    res.RootType,
-			Content:                     res.Content,
-			Hash:                        res.Hash,
-			SourceMetaName:              strings.TrimSpace(entry.Name),
-			SourceMetaPath:              sourceMetaPath,
-			SourceMetaRoot:              sourceMetaRoot,
-			SourceMetaBundledUrl:        sourceMetaBundledSchemaURL(schemaURL),
-			SourceMetaIdentifier:        identifier,
-			SourceMetaBytes:             entry.Bytes,
-			SourceMetaBytesBundled:      entry.BytesBundled,
-			SourceMetaBaseDialect:       strings.TrimSpace(entry.BaseDialect),
-			SourceMetaDialect:           strings.TrimSpace(entry.Dialect),
-			SourceMetaHealth:            entry.Health,
-			SourceMetaHealthIssues:      append([]models.SourceMetaHealthIssue(nil), entry.HealthIssues...),
-			SourceMetaDependencies:      entry.Dependencies,
-			SourceMetaDependencyDetails: append([]models.SourceMetaDependency(nil), entry.DependencyDetails...),
-			LastCrawledAt:               now,
+			Id:            shortid.MustGenerate(),
+			SchemaUrl:     fileURL,
+			Title:         contentStringWithFallback(res.Content, "title", name),
+			Description:   contentStringWithFallback(res.Content, "description"),
+			Dialect:       res.Dialect,
+			RootType:      res.RootType,
+			Content:       res.Content,
+			Hash:          res.Hash,
+			FileName:      name,
+			Path:          relative,
+			Collection:    collection,
+			SourceUrl:     fileURL,
+			LastCrawledAt: now,
 		}
-		if schema.Dialect == "unknown" && strings.TrimSpace(entry.BaseDialect) != "" {
-			schema.Dialect = jsonschema.NormalizeDialect(entry.BaseDialect)
-		}
-
-		if err := s.repo.SaveSchema(ctx, schema); err != nil {
+		if err = s.repo.SaveSchema(ctx, schema); err != nil {
 			return stored, err
 		}
-		expectedSchemaURL := sourceMetaPublicSchemaURL(schema.SourceMetaPath)
-		if schema.SchemaUrl != expectedSchemaURL || schema.SourceMetaBundledUrl != sourceMetaBundledSchemaURL(expectedSchemaURL) {
-			schema.SchemaUrl = expectedSchemaURL
-			schema.SourceMetaBundledUrl = sourceMetaBundledSchemaURL(expectedSchemaURL)
-			if err := s.repo.SaveSchema(ctx, schema); err != nil {
-				return stored, err
-			}
-		}
-
 		storedSchemas = append(storedSchemas, schema)
+		raws[schema.Id] = file.Raw
 		stored++
 	}
 
-	if err := s.enrichSourceMetaDependencyDetails(ctx, storedSchemas); err != nil {
-		return stored, err
-	}
-	for _, schema := range storedSchemas {
-		schemaCopy := *schema
-		go s.publishToTypesense(schemaCopy)
+	if harvest.Complete && len(harvest.ListedURLs) == 0 {
+		log.Printf("[static] waarschuwing: complete harvest zonder bestanden; niets verwijderd")
+	} else if harvest.Complete {
+		if err = s.deleteVanishedStaticSchemas(ctx, harvest.ListedURLs); err != nil {
+			return stored, err
+		}
 	}
 
 	return stored, nil
 }
 
-func (s *SchemaService) enrichSourceMetaDependencyDetails(ctx context.Context, schemas []*models.Schema) error {
-	if len(schemas) == 0 {
-		return nil
+// deleteVanishedStaticSchemas verwijdert geharveste schemas (niet-lege
+// SourceUrl) die niet meer in de static-listing staan.
+func (s *SchemaService) deleteVanishedStaticSchemas(ctx context.Context, listedURLs []string) error {
+	listed := make(map[string]struct{}, len(listedURLs))
+	for _, u := range listedURLs {
+		listed[strings.TrimSpace(u)] = struct{}{}
 	}
-
-	allSchemas, err := s.repo.AllSchemas(ctx)
+	all, err := s.repo.AllSchemas(ctx)
 	if err != nil {
 		return err
 	}
-	bySourceMetaIdentifier := make(map[string]models.Schema, len(allSchemas))
-	for _, schema := range allSchemas {
-		if identifier := strings.TrimSpace(schema.SourceMetaIdentifier); identifier != "" {
-			bySourceMetaIdentifier[identifier] = schema
-		}
-	}
-
-	for _, schema := range schemas {
-		if len(schema.SourceMetaDependencyDetails) == 0 {
+	for _, candidate := range all {
+		identifier := strings.TrimSpace(candidate.SourceUrl)
+		if identifier == "" {
 			continue
 		}
-		enriched, changed := enrichSourceMetaDependencies(schema.SourceMetaDependencyDetails, bySourceMetaIdentifier)
-		if !changed {
+		if _, ok := listed[identifier]; ok {
 			continue
 		}
-		schema.SourceMetaDependencyDetails = enriched
-		if err := s.repo.SaveSchema(ctx, schema); err != nil {
+		if err := s.repo.DeleteSchema(ctx, candidate.Id); err != nil {
 			return err
 		}
+		log.Printf("[static] schema %s (%s) verwijderd: bestand niet meer aanwezig", candidate.Id, identifier)
+		if err := deleteSchemaFromTypesense(ctx, candidate.Id); err != nil {
+			log.Printf("[static] schema %s uit Typesense verwijderen mislukt: %v", candidate.Id, err)
+		}
 	}
-
 	return nil
 }
 
-func enrichSourceMetaDependencies(
-	dependencies []models.SourceMetaDependency,
-	bySourceMetaIdentifier map[string]models.Schema,
-) ([]models.SourceMetaDependency, bool) {
-	enriched := make([]models.SourceMetaDependency, len(dependencies))
-	changed := false
-	for i, dependency := range dependencies {
-		next := dependency
-
-		fromSchema, hasFromSchema := bySourceMetaIdentifier[strings.TrimSpace(dependency.From)]
-		var dependencyChanged bool
-		next, dependencyChanged = withSourceMetaDependencySchema(next, "from", fromSchema, hasFromSchema)
-		changed = dependencyChanged || changed
-
-		toSchema, hasToSchema := bySourceMetaIdentifier[strings.TrimSpace(dependency.To)]
-		next, dependencyChanged = withSourceMetaDependencySchema(next, "to", toSchema, hasToSchema)
-		changed = dependencyChanged || changed
-
-		enriched[i] = next
+// staticRelativePath geeft het pad van een bestands-URL relatief aan de base-URL,
+// zonder .schema.json/.json-extensie en URL-decoded (bv. "don/Api").
+func staticRelativePath(baseURL, fileURL string) string {
+	rel := strings.TrimPrefix(fileURL, baseURL)
+	if rel == fileURL {
+		if u, err := url.Parse(fileURL); err == nil {
+			rel = strings.TrimPrefix(u.Path, "/")
+		}
 	}
-	return enriched, changed
+	if unescaped, err := url.PathUnescape(rel); err == nil {
+		rel = unescaped
+	}
+	rel = strings.TrimPrefix(rel, "/")
+	rel = strings.TrimSuffix(rel, ".json")
+	return strings.TrimSuffix(rel, ".schema")
 }
 
-func withSourceMetaDependencySchema(
-	dependency models.SourceMetaDependency,
+// RefreshAnalysis berekent voor alle schemas in het register de dependencies,
+// dependents, health, groottes en dialect met schemaanalysis en slaat alleen
+// de schemas op (en publiceert ze naar Typesense) waarvan de analyse veranderde.
+func (s *SchemaService) RefreshAnalysis(ctx context.Context) error {
+	changed, err := s.runAnalysis(ctx, nil)
+	for _, schema := range changed {
+		go s.publishToTypesense(schema)
+	}
+	return err
+}
+
+// refreshAnalysisAndPublish draait de analyse (fouten worden gelogd, nooit
+// teruggegeven) en publiceert de opgegeven schemas plus alle schemas waarvan de
+// analyse veranderde, elk precies een keer en met de nieuwste analysevelden.
+func (s *SchemaService) refreshAnalysisAndPublish(ctx context.Context, raws map[string][]byte, primary ...models.Schema) {
+	changed, err := s.runAnalysis(ctx, raws)
+	if err != nil {
+		log.Printf("[analyse] analyse mislukt: %v", err)
+	}
+	latest := make(map[string]models.Schema, len(changed))
+	for _, schema := range changed {
+		latest[schema.Id] = schema
+	}
+	published := make(map[string]bool, len(primary)+len(changed))
+	for _, schema := range primary {
+		if newer, ok := latest[schema.Id]; ok {
+			schema = newer
+		}
+		published[schema.Id] = true
+		go s.publishToTypesense(schema)
+	}
+	for _, schema := range changed {
+		if !published[schema.Id] {
+			go s.publishToTypesense(schema)
+		}
+	}
+}
+
+// runAnalysis voert de analyse uit en geeft de schemas terug die zijn bijgewerkt.
+// raws bevat optioneel de originele bestandsinhoud per schema-id; zonder raw
+// wordt de grootte uit de content afgeleid (of, voor geharveste schemas, de
+// eerder vastgelegde bestandsgrootte behouden).
+func (s *SchemaService) runAnalysis(ctx context.Context, raws map[string][]byte) ([]models.Schema, error) {
+	all, byKey, lookup, err := s.analysisIndex(ctx)
+	if err != nil {
+		return nil, err
+	}
+	bundledURLTemplate := bundleURLTemplate()
+
+	results := make([]schemaanalysis.Result, len(all))
+	type incomingEdge struct {
+		dep    models.Dependency
+		source models.Schema
+	}
+	incoming := make(map[string][]incomingEdge)
+	for i, schema := range all {
+		results[i] = schemaanalysis.Analyze(schema.Content, raws[schema.Id], schema.SchemaUrl, lookup)
+		for _, dep := range results[i].Dependencies {
+			target, ok := byKey[strings.TrimSpace(dep.To)]
+			if ok && target.Id != schema.Id {
+				incoming[target.Id] = append(incoming[target.Id], incomingEdge{dep: dep, source: schema})
+			}
+		}
+	}
+
+	var changed []models.Schema
+	for i := range all {
+		schema := all[i]
+		res := results[i]
+
+		outgoing := append([]models.Dependency(nil), res.Dependencies...)
+		sort.SliceStable(outgoing, func(a, b int) bool { return outgoing[a].At < outgoing[b].At })
+		in := incoming[schema.Id]
+		sort.SliceStable(in, func(a, b int) bool {
+			if in[a].dep.From != in[b].dep.From {
+				return in[a].dep.From < in[b].dep.From
+			}
+			if in[a].source.Id != in[b].source.Id {
+				return in[a].source.Id < in[b].source.Id
+			}
+			return in[a].dep.At < in[b].dep.At
+		})
+		details := make([]models.Dependency, 0, len(outgoing)+len(in))
+		for _, dep := range outgoing {
+			details = append(details, enrichDependencyEdge(dep, schema, byKey))
+		}
+		for _, edge := range in {
+			details = append(details, enrichDependencyEdge(edge.dep, edge.source, byKey))
+		}
+
+		bytes := res.Bytes
+		if len(raws[schema.Id]) == 0 && strings.TrimSpace(schema.SourceUrl) != "" && schema.Bytes > 0 {
+			bytes = schema.Bytes
+		}
+
+		next := schema
+		next.Dependencies = details
+		next.DependencyCount = res.DependencyCount
+		next.Health = res.Health
+		next.HealthIssues = res.HealthIssues
+		next.Bytes = bytes
+		next.BundledBytes = res.BytesBundled
+		next.DialectUri = res.Dialect
+		next.BundledSchemaUrl = strings.ReplaceAll(bundledURLTemplate, "{id}", url.PathEscape(schema.Id))
+
+		if !analysisChanged(schema, next) {
+			continue
+		}
+		if err := s.repo.UpdateSchemaAnalysis(ctx, &next); err != nil {
+			return changed, err
+		}
+		changed = append(changed, next)
+	}
+	return changed, nil
+}
+
+// analysisIndex haalt alle schemas op (gesorteerd op id) en bouwt de lookup op
+// identifier, schemaUrl en absolute $id (zonder fragment). Sleutelbotsingen
+// worden deterministisch opgelost: het schema met de laagste id wint.
+func (s *SchemaService) analysisIndex(ctx context.Context) ([]models.Schema, map[string]models.Schema, schemaanalysis.Lookup, error) {
+	all, err := s.repo.AllSchemas(ctx)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	sort.SliceStable(all, func(a, b int) bool { return all[a].Id < all[b].Id })
+	byKey := make(map[string]models.Schema, len(all)*3)
+	for _, schema := range all {
+		for _, key := range analysisKeys(schema) {
+			if _, exists := byKey[key]; !exists {
+				byKey[key] = schema
+			}
+		}
+	}
+	lookup := func(uri string) (map[string]any, bool) {
+		schema, ok := byKey[strings.TrimSpace(uri)]
+		if !ok || schema.Content == nil {
+			return nil, false
+		}
+		return schema.Content, true
+	}
+	return all, byKey, lookup, nil
+}
+
+// analysisLookup geeft dezelfde register-lookup als de analyse gebruikt.
+func (s *SchemaService) analysisLookup(ctx context.Context) (schemaanalysis.Lookup, error) {
+	_, _, lookup, err := s.analysisIndex(ctx)
+	return lookup, err
+}
+
+// BundleSchema geeft het gebundelde schema (alle transitieve refs binnen het
+// register ingevoegd onder $defs). Geeft nil, nil bij een onbekend id.
+func (s *SchemaService) BundleSchema(ctx context.Context, id string) (map[string]any, error) {
+	schema, err := s.RetrieveSchemaModel(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if schema == nil || len(schema.Content) == 0 {
+		return nil, nil
+	}
+	lookup, err := s.analysisLookup(ctx)
+	if err != nil {
+		return nil, err
+	}
+	base := schemaanalysis.BaseURI(schema.Content, schema.SchemaUrl)
+	bundle, _ := schemaanalysis.Bundle(schema.Content, base, lookup)
+	return bundle, nil
+}
+
+// bundleURLTemplate geeft het publieke URL-sjabloon voor gebundelde schemas;
+// {id} wordt per schema vervangen.
+func bundleURLTemplate() string {
+	if t := strings.TrimSpace(os.Getenv("SCHEMA_BUNDLE_URL_TEMPLATE")); t != "" {
+		return t
+	}
+	return "https://schemas.developer.overheid.nl/schemas/download/{id}/bundle.json"
+}
+
+// enrichDependencyEdge zet From* op het werkelijke bronschema en To* via de
+// register-lookup.
+func enrichDependencyEdge(dep models.Dependency, source models.Schema, byKey map[string]models.Schema) models.Dependency {
+	dep, _ = withDependencySchema(dep, "from", source, true)
+	target, found := byKey[strings.TrimSpace(dep.To)]
+	dep, _ = withDependencySchema(dep, "to", target, found)
+	return dep
+}
+
+// analysisKeys geeft de sleutels waarop een schema binnen het register
+// gevonden kan worden: identifier, schemaUrl en absolute $id zonder fragment.
+func analysisKeys(schema models.Schema) []string {
+	var keys []string
+	add := func(k string) {
+		if k = strings.TrimSpace(k); k != "" {
+			keys = append(keys, k)
+		}
+	}
+	add(schema.SourceUrl)
+	add(schema.SchemaUrl)
+	if id, ok := schema.Content["$id"].(string); ok {
+		if u, err := url.Parse(strings.TrimSpace(id)); err == nil && u.IsAbs() {
+			u.Fragment = ""
+			add(u.String())
+		}
+	}
+	return keys
+}
+
+// analysisChanged vergelijkt de analysevelden van twee schemas; lege en nil
+// slices gelden als gelijk.
+func analysisChanged(a, b models.Schema) bool {
+	return a.DependencyCount != b.DependencyCount ||
+		a.Health != b.Health ||
+		a.Bytes != b.Bytes ||
+		a.BundledBytes != b.BundledBytes ||
+		a.DialectUri != b.DialectUri ||
+		a.BundledSchemaUrl != b.BundledSchemaUrl ||
+		(len(a.Dependencies) != 0 || len(b.Dependencies) != 0) &&
+			!reflect.DeepEqual(a.Dependencies, b.Dependencies) ||
+		(len(a.HealthIssues) != 0 || len(b.HealthIssues) != 0) &&
+			!reflect.DeepEqual(a.HealthIssues, b.HealthIssues)
+}
+
+func withDependencySchema(
+	dependency models.Dependency,
 	direction string,
 	schema models.Schema,
 	found bool,
-) (models.SourceMetaDependency, bool) {
+) (models.Dependency, bool) {
 	id, schemaURL, title := "", "", ""
 	if found {
 		id = schema.Id
-		schemaURL = sourceMetaSchemaFrontendPath(schema.Id)
+		schemaURL = schemaFrontendPath(schema.Id)
 		title = schema.Title
 	}
 
@@ -457,74 +689,8 @@ func withSourceMetaDependencySchema(
 	}
 }
 
-func sourceMetaSchemaID(identifier string) string {
-	return shortid.MustGenerate()
-}
-
-func sourceMetaSchemaFrontendPath(id string) string {
+func schemaFrontendPath(id string) string {
 	return "schemas/" + url.PathEscape(id)
-}
-
-func sourceMetaPublicSchemaURL(sourceMetaPath string) string {
-	baseURL := strings.TrimSpace(os.Getenv("SOURCEMETA_PUBLIC_SCHEMA_BASE_URL"))
-	if baseURL == "" {
-		baseURL = defaultSourceMetaPublicSchemaBaseURL
-	}
-	u, err := url.Parse(baseURL)
-	if err != nil {
-		return strings.TrimRight(baseURL, "/") + "/" + escapedPath(sourceMetaPath)
-	}
-	u.Path = path.Join(u.Path, normalizeSourceMetaPath(sourceMetaPath))
-	return u.String()
-}
-
-func sourceMetaBundledSchemaURL(schemaURL string) string {
-	if strings.TrimSpace(schemaURL) == "" {
-		return ""
-	}
-	u, err := url.Parse(schemaURL)
-	if err != nil {
-		return schemaURL + "?bundle=1"
-	}
-	query := u.Query()
-	query.Set("bundle", "1")
-	u.RawQuery = query.Encode()
-	return u.String()
-}
-
-func normalizeSourceMetaPath(rawPath string) string {
-	trimmed := strings.TrimSpace(rawPath)
-	if trimmed == "" {
-		return ""
-	}
-	if parsed, err := url.Parse(trimmed); err == nil && parsed.Scheme != "" && parsed.Host != "" {
-		trimmed = parsed.Path
-	}
-	trimmed = strings.TrimPrefix(trimmed, "/")
-	return strings.TrimPrefix(trimmed, "schemas/")
-}
-
-func sourceMetaRootFromPath(sourceMetaPath string) string {
-	trimmed := strings.Trim(normalizeSourceMetaPath(sourceMetaPath), "/")
-	if trimmed == "" {
-		return ""
-	}
-	if idx := strings.Index(trimmed, "/"); idx >= 0 {
-		return trimmed[:idx]
-	}
-	return trimmed
-}
-
-func escapedPath(rawPath string) string {
-	segments := strings.Split(normalizeSourceMetaPath(rawPath), "/")
-	escaped := make([]string, 0, len(segments))
-	for _, segment := range segments {
-		if segment == "" {
-			continue
-		}
-		escaped = append(escaped, url.PathEscape(segment))
-	}
-	return strings.Join(escaped, "/")
 }
 
 func contentStringWithFallback(content map[string]any, key string, fallbacks ...string) string {
