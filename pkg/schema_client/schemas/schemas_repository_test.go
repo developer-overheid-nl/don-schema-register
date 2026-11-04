@@ -348,3 +348,17 @@ func TestOrganisationsAndUpdateSchema(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Adres v2", updated.Title)
 }
+
+func TestDeleteSchema(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+	require.NoError(t, repo.SaveSchema(ctx, &models.Schema{Id: "del-1", Title: "Weg"}))
+	require.NoError(t, repo.SaveSchema(ctx, &models.Schema{Id: "del-2", Title: "Blijft"}))
+
+	require.NoError(t, repo.DeleteSchema(ctx, "del-1"))
+
+	all, err := repo.AllSchemas(ctx)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	require.Equal(t, "del-2", all[0].Id)
+}

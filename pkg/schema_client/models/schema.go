@@ -106,20 +106,20 @@ type SourceMetaHealthIssue struct {
 	Pointers    []string `json:"pointers"`
 }
 
-type SourceMetaSchemaMetadata struct {
-	Name              string                  `json:"name"`
-	Path              string                  `json:"path,omitempty"`
-	Identifier        string                  `json:"identifier"`
-	Bytes             int                     `json:"bytes"`
-	BytesBundled      int                     `json:"bytesBundled"`
-	BaseDialect       string                  `json:"baseDialect"`
-	Dialect           string                  `json:"dialect"`
-	Health            int                     `json:"health"`
-	HealthIssues      []SourceMetaHealthIssue `json:"healthIssues,omitempty"`
-	Dependencies      int                     `json:"dependencies"`
-	DependencyDetails []SourceMetaDependency  `json:"dependencyDetails,omitempty"`
-	Description       string                  `json:"description"`
-	RawContent        []byte                  `json:"-"`
+// StaticSchemaFile is een uit don-static opgehaald schemabestand.
+type StaticSchemaFile struct {
+	URL string
+	Raw []byte
+}
+
+// StaticHarvest is het resultaat van een run over de don-static directory-listing.
+// ListedURLs bevat alle gevonden bestands-URL's (ook niet-ophaalbare), Complete is
+// alleen true als alle listings gelukt zijn. BaseURL is de gebruikte root-URL.
+type StaticHarvest struct {
+	BaseURL    string
+	Files      []StaticSchemaFile
+	ListedURLs []string
+	Complete   bool
 }
 
 type SchemaPost struct {

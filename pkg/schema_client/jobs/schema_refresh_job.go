@@ -18,21 +18,21 @@ const (
 )
 
 type SchemaRefresher interface {
-	HarvestSourceMetaSchemas(ctx context.Context, entries []models.SourceMetaSchemaMetadata) (int, error)
+	HarvestStaticSchemas(ctx context.Context, harvest models.StaticHarvest) (int, error)
 	RefreshChangedSchemas(ctx context.Context) (int, error)
 }
 
-type SourceMetaHarvestClient interface {
-	Harvest(ctx context.Context) ([]models.SourceMetaSchemaMetadata, error)
+type StaticHarvestClient interface {
+	Harvest(ctx context.Context) (models.StaticHarvest, error)
 }
 
 // SchemaRefreshJob draait direct na startup en daarna dagelijks om 07:00 een refresh-run.
 type SchemaRefreshJob struct {
-	refresher           SchemaRefresher
-	sourceMetaHarvester SourceMetaHarvestClient
-	location            *time.Location
-	ctx                 context.Context
-	cancel              context.CancelFunc
+	refresher       SchemaRefresher
+	staticHarvester StaticHarvestClient
+	location        *time.Location
+	ctx             context.Context
+	cancel          context.CancelFunc
 }
 
 // NewSchemaRefreshJob start direct een refresh-run en plant daarna een dagelijkse job. Parent context kan nil zijn.
@@ -45,11 +45,11 @@ func NewSchemaRefreshJob(refresher SchemaRefresher, parentCtx context.Context) *
 	}
 	ctx, cancel := context.WithCancel(parentCtx)
 	job := &SchemaRefreshJob{
-		refresher:           refresher,
-		sourceMetaHarvester: NewSourceMetaHarvester(os.Getenv("SOURCEMETA_ONE_API_BASE"), nil),
-		location:            time.Local,
-		ctx:                 ctx,
-		cancel:              cancel,
+		refresher:       refresher,
+		staticHarvester: NewStaticHarvester(os.Getenv("SCHEMA_STATIC_BASE_URL"), nil),
+		location:        time.Local,
+		ctx:             ctx,
+		cancel:          cancel,
 	}
 	go func() {
 		job.runOnce()
@@ -84,16 +84,16 @@ func (j *SchemaRefreshJob) runOnce() {
 	runCtx, cancel := context.WithTimeout(j.ctx, runTimeout)
 	defer cancel()
 
-	if j.sourceMetaHarvester != nil {
-		entries, err := j.sourceMetaHarvester.Harvest(runCtx)
+	if j.staticHarvester != nil {
+		harvest, err := j.staticHarvester.Harvest(runCtx)
 		if err != nil {
-			log.Printf("[schema-refresh] SourceMeta harvest mislukt: %v", err)
+			log.Printf("[schema-refresh] static harvest mislukt: %v", err)
 		} else {
-			count, err := j.refresher.HarvestSourceMetaSchemas(runCtx, entries)
+			count, err := j.refresher.HarvestStaticSchemas(runCtx, harvest)
 			if err != nil {
-				log.Printf("[schema-refresh] SourceMeta schemas opslaan mislukt: %v", err)
+				log.Printf("[schema-refresh] static schemas opslaan mislukt: %v", err)
 			} else {
-				log.Printf("[schema-refresh] SourceMeta harvest gereed; %d schemas opgeslagen", count)
+				log.Printf("[schema-refresh] static harvest gereed; %d schemas opgeslagen", count)
 			}
 		}
 	}

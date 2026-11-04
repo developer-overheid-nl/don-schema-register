@@ -20,8 +20,6 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-var sourceMetaTestSchema = []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"CRS","description":"Schema description.","type":"object"}`)
-
 func newTestService(t *testing.T) (*services.SchemaService, schemas.SchemasRepository) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
@@ -145,196 +143,6 @@ func TestCreateSchemaFromInputWithBody(t *testing.T) {
 	require.Equal(t, "object", created.RootType)
 	require.Nil(t, created.Organisation)
 	require.NotEmpty(t, created.Id)
-}
-
-func TestHarvestSourceMetaSchemasStoresMetadata(t *testing.T) {
-	svc, repo := newTestService(t)
-	ctx := context.Background()
-
-	count, err := svc.HarvestSourceMetaSchemas(ctx, []models.SourceMetaSchemaMetadata{
-		{
-			Name:         "crs",
-			Path:         "/api-register/crs",
-			Identifier:   "https://schemas.example.org/api-register/crs",
-			Bytes:        2240,
-			BytesBundled: 2240,
-			BaseDialect:  "https://json-schema.org/draft/2020-12/schema",
-			Dialect:      "https://json-schema.org/draft/2020-12/schema",
-			Health:       82,
-			Dependencies: 1,
-			HealthIssues: []models.SourceMetaHealthIssue{
-				{
-					Name:        "missing_examples",
-					Message:     "Schema has no examples.",
-					Description: "Examples make schemas easier to understand.",
-					Pointers:    []string{""},
-				},
-			},
-			DependencyDetails: []models.SourceMetaDependency{
-				{
-					From: "https://schemas.example.org/api-register/crs",
-					To:   "https://schemas.example.org/api-register/_shared/link",
-					At:   "/properties/links/items/$ref",
-				},
-				{
-					From: "https://schemas.example.org/api-register/_shared/link",
-					To:   "https://schemas.example.org/api-register/crs",
-					At:   "/properties/crs/$ref",
-				},
-			},
-			Description: "Coordinate reference system.",
-			RawContent:  sourceMetaTestSchema,
-		},
-		{
-			Name:       "link",
-			Path:       "/api-register/_shared/link",
-			Identifier: "https://schemas.example.org/api-register/_shared/link",
-			RawContent: []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"Link","type":"object"}`),
-		},
-	})
-	require.NoError(t, err)
-	require.Equal(t, 2, count)
-
-	all, err := repo.AllSchemas(ctx)
-	require.NoError(t, err)
-	require.Len(t, all, 2)
-
-	var schema, dependencyTarget models.Schema
-	for _, candidate := range all {
-		switch candidate.SourceMetaIdentifier {
-		case "https://schemas.example.org/api-register/crs":
-			schema = candidate
-		case "https://schemas.example.org/api-register/_shared/link":
-			dependencyTarget = candidate
-		}
-	}
-	require.NotEmpty(t, schema.Id)
-	require.NotEmpty(t, dependencyTarget.Id)
-
-	require.Equal(t, "CRS", schema.Title)
-	require.Equal(t, "Schema description.", schema.Description)
-	require.Equal(t, "2020-12", schema.Dialect)
-	require.Equal(t, "object", schema.RootType)
-	require.Equal(t, "https://static.developer.overheid.nl/schemas/api-register/crs", schema.SchemaUrl)
-	require.NotEmpty(t, schema.Hash)
-	require.Equal(t, "object", schema.Content["type"])
-	require.Equal(t, "crs", schema.SourceMetaName)
-	require.Equal(t, "api-register/crs", schema.SourceMetaPath)
-	require.Equal(t, "api-register", schema.SourceMetaRoot)
-	require.Equal(t, "https://static.developer.overheid.nl/schemas/api-register/crs?bundle=1", schema.SourceMetaBundledUrl)
-	require.Equal(t, "https://schemas.example.org/api-register/crs", schema.SourceMetaIdentifier)
-	require.Equal(t, 2240, schema.SourceMetaBytes)
-	require.Equal(t, 2240, schema.SourceMetaBytesBundled)
-	require.Equal(t, "https://json-schema.org/draft/2020-12/schema", schema.SourceMetaBaseDialect)
-	require.Equal(t, "https://json-schema.org/draft/2020-12/schema", schema.SourceMetaDialect)
-	require.Equal(t, 82, schema.SourceMetaHealth)
-	require.Equal(t, []models.SourceMetaHealthIssue{
-		{
-			Name:        "missing_examples",
-			Message:     "Schema has no examples.",
-			Description: "Examples make schemas easier to understand.",
-			Pointers:    []string{""},
-		},
-	}, schema.SourceMetaHealthIssues)
-	require.Equal(t, 1, schema.SourceMetaDependencies)
-	require.Equal(t, []models.SourceMetaDependency{
-		{
-			From:            "https://schemas.example.org/api-register/crs",
-			To:              "https://schemas.example.org/api-register/_shared/link",
-			At:              "/properties/links/items/$ref",
-			FromSchemaId:    schema.Id,
-			FromSchemaUrl:   "schemas/" + schema.Id,
-			FromSchemaTitle: "CRS",
-			ToSchemaId:      dependencyTarget.Id,
-			ToSchemaUrl:     "schemas/" + dependencyTarget.Id,
-			ToSchemaTitle:   "Link",
-		},
-		{
-			From:            "https://schemas.example.org/api-register/_shared/link",
-			To:              "https://schemas.example.org/api-register/crs",
-			At:              "/properties/crs/$ref",
-			FromSchemaId:    dependencyTarget.Id,
-			FromSchemaUrl:   "schemas/" + dependencyTarget.Id,
-			FromSchemaTitle: "Link",
-			ToSchemaId:      schema.Id,
-			ToSchemaUrl:     "schemas/" + schema.Id,
-			ToSchemaTitle:   "CRS",
-		},
-	}, schema.SourceMetaDependencyDetails)
-}
-
-func TestHarvestSourceMetaSchemasUsesOpaqueID(t *testing.T) {
-	svc, repo := newTestService(t)
-	ctx := context.Background()
-
-	_, err := svc.HarvestSourceMetaSchemas(ctx, []models.SourceMetaSchemaMetadata{
-		{
-			Name:       "crs",
-			Identifier: "https://schemas.example.org/api-register/crs",
-			RawContent: sourceMetaTestSchema,
-		},
-	})
-	require.NoError(t, err)
-
-	all, err := repo.AllSchemas(ctx)
-	require.NoError(t, err)
-	require.Len(t, all, 1)
-	require.NotEmpty(t, all[0].Id)
-	require.NotContains(t, all[0].Id, "source-meta")
-}
-
-func TestHarvestSourceMetaSchemasKeepsStaticURLInSyncWithExistingID(t *testing.T) {
-	svc, repo := newTestService(t)
-	ctx := context.Background()
-	entry := models.SourceMetaSchemaMetadata{
-		Name:       "crs",
-		Path:       "/schemas/api-register/crs",
-		Identifier: "https://schemas.example.org/api-register/crs",
-		RawContent: sourceMetaTestSchema,
-	}
-
-	_, err := svc.HarvestSourceMetaSchemas(ctx, []models.SourceMetaSchemaMetadata{entry})
-	require.NoError(t, err)
-	all, err := repo.AllSchemas(ctx)
-	require.NoError(t, err)
-	require.Len(t, all, 1)
-	firstID := all[0].Id
-
-	_, err = svc.HarvestSourceMetaSchemas(ctx, []models.SourceMetaSchemaMetadata{entry})
-	require.NoError(t, err)
-	all, err = repo.AllSchemas(ctx)
-	require.NoError(t, err)
-	require.Len(t, all, 1)
-	require.Equal(t, firstID, all[0].Id)
-	require.Equal(t, "https://static.developer.overheid.nl/schemas/api-register/crs", all[0].SchemaUrl)
-	require.Equal(t, "https://static.developer.overheid.nl/schemas/api-register/crs?bundle=1", all[0].SourceMetaBundledUrl)
-}
-
-func TestHarvestSourceMetaSchemasMigratesLegacySourceMetaID(t *testing.T) {
-	svc, repo := newTestService(t)
-	ctx := context.Background()
-
-	require.NoError(t, repo.SaveSchema(ctx, &models.Schema{
-		Id:                   "source-meta-06aaddfcede69a1f",
-		Title:                "Legacy",
-		SourceMetaIdentifier: "https://schemas.example.org/api-register/crs",
-	}))
-
-	_, err := svc.HarvestSourceMetaSchemas(ctx, []models.SourceMetaSchemaMetadata{
-		{
-			Name:       "crs",
-			Identifier: "https://schemas.example.org/api-register/crs",
-			RawContent: sourceMetaTestSchema,
-		},
-	})
-	require.NoError(t, err)
-
-	all, err := repo.AllSchemas(ctx)
-	require.NoError(t, err)
-	require.Len(t, all, 1)
-	require.NotEqual(t, "source-meta-06aaddfcede69a1f", all[0].Id)
-	require.NotContains(t, all[0].Id, "source-meta")
-	require.Equal(t, "CRS", all[0].Title)
 }
 
 func TestCreateSchemaFromInputWithURL(t *testing.T) {
@@ -620,4 +428,89 @@ func TestPublishAllSchemasToTypesenseDisabled(t *testing.T) {
 	}))
 
 	require.NoError(t, svc.PublishAllSchemasToTypesense(context.Background()))
+}
+
+const staticBase = "https://static.developer.overheid.nl/schemas/"
+
+func staticFile(path string, raw string) models.StaticSchemaFile {
+	return models.StaticSchemaFile{URL: staticBase + path, Raw: []byte(raw)}
+}
+
+func TestHarvestStaticSchemasStoresFileURL(t *testing.T) {
+	svc, repo := newTestService(t)
+	ctx := context.Background()
+	raw := `{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://schemas.example.org/don/Api","type":"object"}`
+	file := staticFile("don/Api.schema.json", raw)
+
+	count, err := svc.HarvestStaticSchemas(ctx, models.StaticHarvest{
+		BaseURL: staticBase, Files: []models.StaticSchemaFile{file}, ListedURLs: []string{file.URL}, Complete: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+
+	all, err := repo.AllSchemas(ctx)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	s := all[0]
+	require.NotEmpty(t, s.Id)
+	require.Equal(t, file.URL, s.SchemaUrl)
+	require.Equal(t, file.URL, s.SourceMetaIdentifier)
+	require.Equal(t, "Api", s.SourceMetaName)
+	require.Equal(t, "Api", s.Title)
+	require.Equal(t, "don/Api", s.SourceMetaPath)
+	require.Equal(t, "don", s.SourceMetaRoot)
+	require.Equal(t, "2020-12", s.Dialect)
+	require.Equal(t, "object", s.RootType)
+	require.NotEmpty(t, s.Hash)
+	require.Equal(t, "https://schemas.example.org/don/Api", s.Content["$id"])
+	require.False(t, s.LastCrawledAt.IsZero())
+
+	// Tweede run vindt hetzelfde record terug.
+	_, err = svc.HarvestStaticSchemas(ctx, models.StaticHarvest{
+		BaseURL: staticBase, Files: []models.StaticSchemaFile{file}, ListedURLs: []string{file.URL}, Complete: true,
+	})
+	require.NoError(t, err)
+	again, err := repo.AllSchemas(ctx)
+	require.NoError(t, err)
+	require.Len(t, again, 1)
+	require.Equal(t, s.Id, again[0].Id)
+}
+
+func TestHarvestStaticSchemasDeletesVanishedOnlyWhenComplete(t *testing.T) {
+	svc, repo := newTestService(t)
+	ctx := context.Background()
+	require.NoError(t, repo.SaveSchema(ctx, &models.Schema{Id: "x", Title: "X", SourceMetaIdentifier: staticBase + "weg.schema.json"}))
+	require.NoError(t, repo.SaveSchema(ctx, &models.Schema{Id: "handmatig", Title: "Handmatig", SchemaUrl: "https://example.org/h.json"}))
+
+	_, err := svc.HarvestStaticSchemas(ctx, models.StaticHarvest{BaseURL: staticBase, Complete: false})
+	require.NoError(t, err)
+	all, err := repo.AllSchemas(ctx)
+	require.NoError(t, err)
+	require.Len(t, all, 2)
+
+	_, err = svc.HarvestStaticSchemas(ctx, models.StaticHarvest{BaseURL: staticBase, Complete: true})
+	require.NoError(t, err)
+	all, err = repo.AllSchemas(ctx)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	require.Equal(t, "handmatig", all[0].Id)
+}
+
+func TestHarvestStaticSchemasKeepsRecordWhenFileInvalid(t *testing.T) {
+	svc, repo := newTestService(t)
+	ctx := context.Background()
+	url := staticBase + "y.schema.json"
+	require.NoError(t, repo.SaveSchema(ctx, &models.Schema{Id: "y", Title: "Oud", Hash: "oud", SourceMetaIdentifier: url}))
+
+	count, err := svc.HarvestStaticSchemas(ctx, models.StaticHarvest{
+		BaseURL: staticBase, Files: []models.StaticSchemaFile{staticFile("y.schema.json", "{")},
+		ListedURLs: []string{url}, Complete: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, count)
+
+	got, err := repo.GetSchemaByID(ctx, "y")
+	require.NoError(t, err)
+	require.Equal(t, "Oud", got.Title)
+	require.Equal(t, "oud", got.Hash)
 }

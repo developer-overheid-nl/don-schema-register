@@ -16,6 +16,7 @@ type SchemasRepository interface {
 	GetSchemas(ctx context.Context, page, perPage int, p *models.SchemaFiltersParams) ([]models.Schema, models.Pagination, error)
 	GetSchemaByID(ctx context.Context, id string) (*models.Schema, error)
 	SaveSchema(ctx context.Context, schema *models.Schema) error
+	DeleteSchema(ctx context.Context, id string) error
 	UpdateSchema(ctx context.Context, schema *models.Schema) error
 	SearchSchemas(ctx context.Context, page, perPage int, organisation *string, query string) ([]models.Schema, models.Pagination, error)
 	SaveOrganisatie(organisation *models.Organisation) error
@@ -201,6 +202,11 @@ func (r *schemasRepository) SearchSchemas(ctx context.Context, page, perPage int
 
 func (r *schemasRepository) SaveOrganisatie(organisation *models.Organisation) error {
 	return r.db.Save(organisation).Error
+}
+
+// DeleteSchema verwijdert het schema met het opgegeven id.
+func (r *schemasRepository) DeleteSchema(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&models.Schema{}).Error
 }
 
 func (r *schemasRepository) AllSchemas(ctx context.Context) ([]models.Schema, error) {
