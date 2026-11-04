@@ -571,3 +571,126 @@ func TestHarvestStaticSchemasKeepsIdenticalFilesSeparate(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, all, 2)
 }
+
+func harvestOne(t *testing.T, svc *services.SchemaService, path, raw string) {
+	t.Helper()
+	file := staticFile(path, raw)
+	_, err := svc.HarvestStaticSchemas(context.Background(), models.StaticHarvest{
+		BaseURL: staticBase, Files: []models.StaticSchemaFile{file},
+	})
+	require.NoError(t, err)
+}
+
+func schemaByTitle(t *testing.T, repo schemas.SchemasRepository, title string) models.Schema {
+	t.Helper()
+	all, err := repo.AllSchemas(context.Background())
+	require.NoError(t, err)
+	for _, s := range all {
+		if s.Title == title {
+			return s
+		}
+	}
+	t.Fatalf("schema %q niet gevonden", title)
+	return models.Schema{}
+}
+
+func TestRefreshAnalysisLinksDependenciesAcrossSources(t *testing.T) {
+	svc, repo := newTestService(t)
+	ctx := context.Background()
+	createTestOrg(t, svc)
+
+	orgURL := "https://schemas.example.org/don/Organisation"
+	harvestOne(t, svc, "don/Organisation.schema.json",
+		`{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"`+orgURL+`","title":"Organisation","type":"object"}`)
+
+	_, err := svc.CreateSchemaFromInput(models.SchemaPost{
+		OrganisationUri: "https://example.org/org",
+		Contact:         testContact(),
+		SchemaBody: `{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://example.org/Client","title":"Client","type":"object",` +
+			`"properties":{"org":{"$ref":"` + orgURL + `"}}}`,
+	})
+	require.NoError(t, err)
+
+	org := schemaByTitle(t, repo, "Organisation")
+	client := schemaByTitle(t, repo, "Client")
+	require.Equal(t, 1, client.SourceMetaDependencies)
+	require.Greater(t, client.SourceMetaHealth, 0)
+	require.Len(t, client.SourceMetaDependencyDetails, 1)
+	require.Equal(t, org.Id, client.SourceMetaDependencyDetails[0].ToSchemaId)
+	require.Equal(t, client.Id, client.SourceMetaDependencyDetails[0].FromSchemaId)
+
+	// Organisation ziet de inkomende edge, maar heeft zelf geen uitgaande.
+	require.Equal(t, 0, org.SourceMetaDependencies)
+	require.Len(t, org.SourceMetaDependencyDetails, 1)
+	require.Equal(t, client.Id, org.SourceMetaDependencyDetails[0].FromSchemaId)
+	require.Equal(t, org.Id, org.SourceMetaDependencyDetails[0].ToSchemaId)
+	_ = ctx
+}
+
+func TestRefreshAnalysisIncomingEdgesFromSeveralSchemas(t *testing.T) {
+	svc, repo := newTestService(t)
+	base := "https://schemas.example.org/don/"
+	draft := `"$schema":"https://json-schema.org/draft/2020-12/schema"`
+	harvestOne(t, svc, "don/Organisation.schema.json", `{`+draft+`,"$id":"`+base+`Organisation","title":"Organisation","type":"object"}`)
+	harvestOne(t, svc, "don/Api.schema.json", `{`+draft+`,"$id":"`+base+`Api","title":"Api","type":"object","properties":{"organisation":{"$ref":"`+base+`Organisation"}}}`)
+	harvestOne(t, svc, "don/Repository.schema.json", `{`+draft+`,"$id":"`+base+`Repository","title":"Repository","type":"object","properties":{"owner":{"$ref":"`+base+`Organisation"}}}`)
+
+	org := schemaByTitle(t, repo, "Organisation")
+	require.Equal(t, 0, org.SourceMetaDependencies)
+	require.Len(t, org.SourceMetaDependencyDetails, 2)
+	api := schemaByTitle(t, repo, "Api")
+	repository := schemaByTitle(t, repo, "Repository")
+	// Deterministisch: inkomend gesorteerd op From, dan At.
+	require.Equal(t, api.Id, org.SourceMetaDependencyDetails[0].FromSchemaId)
+	require.Equal(t, "/properties/organisation/$ref", org.SourceMetaDependencyDetails[0].At)
+	require.Equal(t, repository.Id, org.SourceMetaDependencyDetails[1].FromSchemaId)
+	for _, d := range org.SourceMetaDependencyDetails {
+		require.Equal(t, org.Id, d.ToSchemaId)
+	}
+}
+
+func TestHarvestKeepsRealFileSize(t *testing.T) {
+	svc, repo := newTestService(t)
+	raw := `{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://schemas.example.org/don/A","title":"A","type":"object"}`
+	harvestOne(t, svc, "don/A.schema.json", raw)
+	require.Equal(t, len(raw), schemaByTitle(t, repo, "A").SourceMetaBytes)
+	// Een latere analyse zonder raw laat de bestandsgrootte staan.
+	require.NoError(t, svc.RefreshAnalysis(context.Background()))
+	require.Equal(t, len(raw), schemaByTitle(t, repo, "A").SourceMetaBytes)
+}
+
+func TestRefreshAnalysisReportsUnresolvedForBodyWithoutId(t *testing.T) {
+	svc, repo := newTestService(t)
+	createTestOrg(t, svc)
+	require.NotPanics(t, func() {
+		_, err := svc.CreateSchemaFromInput(models.SchemaPost{
+			OrganisationUri: "https://example.org/org",
+			Contact:         testContact(),
+			SchemaBody:      `{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"Loos","type":"object","properties":{"x":{"$ref":"Other.schema.json"}}}`,
+		})
+		require.NoError(t, err)
+	})
+	s := schemaByTitle(t, repo, "Loos")
+	var found bool
+	for _, issue := range s.SourceMetaHealthIssues {
+		if issue.Name == "unresolved_refs" {
+			found = true
+		}
+	}
+	require.True(t, found, "verwacht unresolved_refs, kreeg %+v", s.SourceMetaHealthIssues)
+}
+
+func TestCreateSchemaRunsAnalysis(t *testing.T) {
+	svc, repo := newTestService(t)
+	createTestOrg(t, svc)
+	_, err := svc.CreateSchemaFromInput(models.SchemaPost{
+		OrganisationUri: "https://example.org/org",
+		Contact:         testContact(),
+		SchemaBody:      `{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://example.org/S","title":"S","description":"d","type":"object"}`,
+	})
+	require.NoError(t, err)
+	s := schemaByTitle(t, repo, "S")
+	require.Greater(t, s.SourceMetaHealth, 0)
+	require.Greater(t, s.SourceMetaBytes, 0)
+	require.Equal(t, "https://json-schema.org/draft/2020-12/schema", s.SourceMetaDialect)
+}

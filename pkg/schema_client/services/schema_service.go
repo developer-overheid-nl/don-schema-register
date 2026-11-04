@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"reflect"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -16,6 +18,7 @@ import (
 	httpclient "github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/helpers/httpclient"
 	jsonschema "github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/helpers/jsonschema"
 	problem "github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/helpers/problem"
+	schemaanalysis "github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/helpers/schemaanalysis"
 	util "github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/helpers/util"
 	"github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/models"
 	"github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/schemas"
@@ -146,8 +149,10 @@ func (s *SchemaService) CreateSchemaFromInput(requestBody models.SchemaPost) (*m
 		return nil, problem.NewInternalServerError("kan schema niet opslaan: " + err.Error())
 	}
 
-	schemaCopy := *schema
-	go s.publishToTypesense(schemaCopy)
+	s.refreshAnalysisAndPublish(ctx, nil, *schema)
+	if fresh, err := s.repo.GetSchemaByID(ctx, schema.Id); err == nil && fresh != nil {
+		schema = fresh
+	}
 
 	created := util.ToSchemaSummary(schema)
 	return &created, nil
@@ -221,8 +226,10 @@ func (s *SchemaService) applySchemaUpdate(ctx context.Context, schema *models.Sc
 		return nil, err
 	}
 
-	schemaCopy := *schema
-	go s.publishToTypesense(schemaCopy)
+	s.refreshAnalysisAndPublish(ctx, nil, *schema)
+	if fresh, err := s.repo.GetSchemaByID(ctx, schema.Id); err == nil && fresh != nil {
+		schema = fresh
+	}
 
 	updated := util.ToSchemaSummary(schema)
 	return &updated, nil
@@ -278,6 +285,11 @@ func (s *SchemaService) RefreshChangedSchemas(ctx context.Context) (int, error) 
 		}
 		updated++
 	}
+	if updated > 0 {
+		if err := s.RefreshAnalysis(ctx); err != nil {
+			log.Printf("[refresh] analyse mislukt: %v", err)
+		}
+	}
 	return updated, nil
 }
 
@@ -296,6 +308,7 @@ func (s *SchemaService) HarvestStaticSchemas(ctx context.Context, harvest models
 	var stored int
 	now := time.Now()
 	storedSchemas := make([]*models.Schema, 0, len(harvest.Files))
+	raws := make(map[string][]byte, len(harvest.Files))
 	for _, file := range harvest.Files {
 		if err := ctx.Err(); err != nil {
 			return stored, err
@@ -336,6 +349,7 @@ func (s *SchemaService) HarvestStaticSchemas(ctx context.Context, harvest models
 			return stored, err
 		}
 		storedSchemas = append(storedSchemas, schema)
+		raws[schema.Id] = file.Raw
 		stored++
 	}
 
@@ -347,10 +361,11 @@ func (s *SchemaService) HarvestStaticSchemas(ctx context.Context, harvest models
 		}
 	}
 
+	primary := make([]models.Schema, 0, len(storedSchemas))
 	for _, schema := range storedSchemas {
-		schemaCopy := *schema
-		go s.publishToTypesense(schemaCopy)
+		primary = append(primary, *schema)
 	}
+	s.refreshAnalysisAndPublish(ctx, raws, primary...)
 	return stored, nil
 }
 
@@ -401,37 +416,159 @@ func staticRelativePath(baseURL, fileURL string) string {
 	return strings.TrimSuffix(rel, ".schema")
 }
 
-func (s *SchemaService) enrichSourceMetaDependencyDetails(ctx context.Context, schemas []*models.Schema) error {
-	if len(schemas) == 0 {
-		return nil
+// RefreshAnalysis berekent voor alle schemas in het register de dependencies,
+// dependents, health, groottes en dialect met schemaanalysis en slaat alleen
+// de schemas op (en publiceert ze naar Typesense) waarvan de analyse veranderde.
+func (s *SchemaService) RefreshAnalysis(ctx context.Context) error {
+	changed, err := s.runAnalysis(ctx, nil)
+	for _, schema := range changed {
+		go s.publishToTypesense(schema)
 	}
+	return err
+}
 
-	allSchemas, err := s.repo.AllSchemas(ctx)
+// refreshAnalysisAndPublish draait de analyse (fouten worden gelogd, nooit
+// teruggegeven) en publiceert de opgegeven schemas plus alle schemas waarvan de
+// analyse veranderde, elk precies een keer en met de nieuwste analysevelden.
+func (s *SchemaService) refreshAnalysisAndPublish(ctx context.Context, raws map[string][]byte, primary ...models.Schema) {
+	changed, err := s.runAnalysis(ctx, raws)
 	if err != nil {
-		return err
+		log.Printf("[analyse] analyse mislukt: %v", err)
 	}
-	bySourceMetaIdentifier := make(map[string]models.Schema, len(allSchemas))
-	for _, schema := range allSchemas {
-		if identifier := strings.TrimSpace(schema.SourceMetaIdentifier); identifier != "" {
-			bySourceMetaIdentifier[identifier] = schema
+	latest := make(map[string]models.Schema, len(changed))
+	for _, schema := range changed {
+		latest[schema.Id] = schema
+	}
+	published := make(map[string]bool, len(primary)+len(changed))
+	for _, schema := range primary {
+		if newer, ok := latest[schema.Id]; ok {
+			schema = newer
+		}
+		published[schema.Id] = true
+		go s.publishToTypesense(schema)
+	}
+	for _, schema := range changed {
+		if !published[schema.Id] {
+			go s.publishToTypesense(schema)
+		}
+	}
+}
+
+// runAnalysis voert de analyse uit en geeft de schemas terug die zijn bijgewerkt.
+// raws bevat optioneel de originele bestandsinhoud per schema-id; zonder raw
+// wordt de grootte uit de content afgeleid (of, voor geharveste schemas, de
+// eerder vastgelegde bestandsgrootte behouden).
+func (s *SchemaService) runAnalysis(ctx context.Context, raws map[string][]byte) ([]models.Schema, error) {
+	all, err := s.repo.AllSchemas(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Lookup op identifier, schemaUrl en absolute $id (zonder fragment).
+	byKey := make(map[string]models.Schema, len(all)*3)
+	for _, schema := range all {
+		for _, key := range analysisKeys(schema) {
+			if _, exists := byKey[key]; !exists {
+				byKey[key] = schema
+			}
+		}
+	}
+	lookup := func(uri string) (map[string]any, bool) {
+		schema, ok := byKey[strings.TrimSpace(uri)]
+		if !ok || schema.Content == nil {
+			return nil, false
+		}
+		return schema.Content, true
+	}
+
+	results := make([]schemaanalysis.Result, len(all))
+	incoming := make(map[string][]models.SourceMetaDependency)
+	for i, schema := range all {
+		results[i] = schemaanalysis.Analyze(schema.Content, raws[schema.Id], schema.SchemaUrl, lookup)
+		for _, dep := range results[i].Dependencies {
+			target, ok := byKey[strings.TrimSpace(dep.To)]
+			if ok && target.Id != schema.Id {
+				incoming[target.Id] = append(incoming[target.Id], dep)
+			}
 		}
 	}
 
-	for _, schema := range schemas {
-		if len(schema.SourceMetaDependencyDetails) == 0 {
+	var changed []models.Schema
+	for i := range all {
+		schema := all[i]
+		res := results[i]
+
+		outgoing := append([]models.SourceMetaDependency(nil), res.Dependencies...)
+		sort.SliceStable(outgoing, func(a, b int) bool { return outgoing[a].At < outgoing[b].At })
+		in := incoming[schema.Id]
+		sort.SliceStable(in, func(a, b int) bool {
+			if in[a].From != in[b].From {
+				return in[a].From < in[b].From
+			}
+			return in[a].At < in[b].At
+		})
+		details := append(outgoing, in...)
+		details, _ = enrichSourceMetaDependencies(details, byKey)
+
+		bytes := res.Bytes
+		if len(raws[schema.Id]) == 0 && strings.TrimSpace(schema.SourceMetaIdentifier) != "" && schema.SourceMetaBytes > 0 {
+			bytes = schema.SourceMetaBytes
+		}
+
+		next := schema
+		next.SourceMetaDependencyDetails = details
+		next.SourceMetaDependencies = res.DependencyCount
+		next.SourceMetaHealth = res.Health
+		next.SourceMetaHealthIssues = res.HealthIssues
+		next.SourceMetaBytes = bytes
+		next.SourceMetaBytesBundled = res.BytesBundled
+		next.SourceMetaBaseDialect = res.BaseDialect
+		next.SourceMetaDialect = res.Dialect
+
+		if !analysisChanged(schema, next) {
 			continue
 		}
-		enriched, changed := enrichSourceMetaDependencies(schema.SourceMetaDependencyDetails, bySourceMetaIdentifier)
-		if !changed {
-			continue
+		if err := s.repo.UpdateSchema(ctx, &next); err != nil {
+			return changed, err
 		}
-		schema.SourceMetaDependencyDetails = enriched
-		if err := s.repo.SaveSchema(ctx, schema); err != nil {
-			return err
+		changed = append(changed, next)
+	}
+	return changed, nil
+}
+
+// analysisKeys geeft de sleutels waarop een schema binnen het register
+// gevonden kan worden: identifier, schemaUrl en absolute $id zonder fragment.
+func analysisKeys(schema models.Schema) []string {
+	var keys []string
+	add := func(k string) {
+		if k = strings.TrimSpace(k); k != "" {
+			keys = append(keys, k)
 		}
 	}
+	add(schema.SourceMetaIdentifier)
+	add(schema.SchemaUrl)
+	if id, ok := schema.Content["$id"].(string); ok {
+		if u, err := url.Parse(strings.TrimSpace(id)); err == nil && u.IsAbs() {
+			u.Fragment = ""
+			add(u.String())
+		}
+	}
+	return keys
+}
 
-	return nil
+// analysisChanged vergelijkt de analysevelden van twee schemas; lege en nil
+// slices gelden als gelijk.
+func analysisChanged(a, b models.Schema) bool {
+	return a.SourceMetaDependencies != b.SourceMetaDependencies ||
+		a.SourceMetaHealth != b.SourceMetaHealth ||
+		a.SourceMetaBytes != b.SourceMetaBytes ||
+		a.SourceMetaBytesBundled != b.SourceMetaBytesBundled ||
+		a.SourceMetaBaseDialect != b.SourceMetaBaseDialect ||
+		a.SourceMetaDialect != b.SourceMetaDialect ||
+		!(len(a.SourceMetaDependencyDetails) == 0 && len(b.SourceMetaDependencyDetails) == 0) &&
+			!reflect.DeepEqual(a.SourceMetaDependencyDetails, b.SourceMetaDependencyDetails) ||
+		!(len(a.SourceMetaHealthIssues) == 0 && len(b.SourceMetaHealthIssues) == 0) &&
+			!reflect.DeepEqual(a.SourceMetaHealthIssues, b.SourceMetaHealthIssues)
 }
 
 func enrichSourceMetaDependencies(
