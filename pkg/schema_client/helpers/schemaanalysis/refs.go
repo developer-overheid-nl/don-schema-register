@@ -3,8 +3,6 @@
 package schemaanalysis
 
 import (
-	"bytes"
-	"encoding/json"
 	"net/url"
 	"sort"
 	"strconv"
