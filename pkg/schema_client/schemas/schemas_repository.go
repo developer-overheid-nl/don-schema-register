@@ -16,7 +16,9 @@ type SchemasRepository interface {
 	GetSchemas(ctx context.Context, page, perPage int, p *models.SchemaFiltersParams) ([]models.Schema, models.Pagination, error)
 	GetSchemaByID(ctx context.Context, id string) (*models.Schema, error)
 	SaveSchema(ctx context.Context, schema *models.Schema) error
+	DeleteSchema(ctx context.Context, id string) error
 	UpdateSchema(ctx context.Context, schema *models.Schema) error
+	UpdateSchemaAnalysis(ctx context.Context, schema *models.Schema) error
 	SearchSchemas(ctx context.Context, page, perPage int, organisation *string, query string) ([]models.Schema, models.Pagination, error)
 	SaveOrganisatie(organisation *models.Organisation) error
 	AllSchemas(ctx context.Context) ([]models.Schema, error)
@@ -52,18 +54,18 @@ func (r *schemasRepository) SaveSchema(ctx context.Context, schema *models.Schem
 		}
 	}
 
-	if !found && schema.SourceMetaIdentifier != "" {
-		err := r.db.WithContext(ctx).Where("source_meta_identifier = ?", schema.SourceMetaIdentifier).First(&existing).Error
+	if !found && schema.SourceUrl != "" {
+		err := r.db.WithContext(ctx).Where("source_url = ?", schema.SourceUrl).First(&existing).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
 		if err == nil {
-			log.Printf("SaveSchema: found existing schema for SourceMeta identifier %q with id %s", schema.SourceMetaIdentifier, existing.Id)
+			log.Printf("SaveSchema: found existing schema for source url %q with id %s", schema.SourceUrl, existing.Id)
 			found = true
 		}
 	}
 
-	if !found && schema.SourceMetaIdentifier == "" && schema.SchemaUrl != "" {
+	if !found && schema.SourceUrl == "" && schema.SchemaUrl != "" {
 		err := r.db.WithContext(ctx).Where("schema_url = ?", schema.SchemaUrl).First(&existing).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
@@ -74,7 +76,9 @@ func (r *schemasRepository) SaveSchema(ctx context.Context, schema *models.Schem
 		}
 	}
 
-	if !found && schema.Hash != "" {
+	// Geharveste schemas (met SourceUrl) zijn alleen via id of
+	// identifier te herkennen; nooit via schema_url of hash.
+	if !found && schema.SourceUrl == "" && schema.Hash != "" {
 		err := r.db.WithContext(ctx).Where("schema_hash = ?", schema.Hash).First(&existing).Error
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
@@ -86,24 +90,6 @@ func (r *schemasRepository) SaveSchema(ctx context.Context, schema *models.Schem
 	}
 
 	if found {
-		if schema.SourceMetaIdentifier != "" &&
-			strings.HasPrefix(existing.Id, "source-meta-") &&
-			schema.Id != "" &&
-			schema.Id != existing.Id {
-			if schema.CreatedAt.IsZero() {
-				schema.CreatedAt = existing.CreatedAt
-			}
-			if schema.OrganisationID == nil {
-				schema.OrganisationID = existing.OrganisationID
-			}
-			return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-				if err := tx.Delete(&existing).Error; err != nil {
-					return err
-				}
-				return tx.Create(schema).Error
-			})
-		}
-
 		schema.Id = existing.Id
 		if schema.CreatedAt.IsZero() {
 			schema.CreatedAt = existing.CreatedAt
@@ -120,6 +106,20 @@ func (r *schemasRepository) SaveSchema(ctx context.Context, schema *models.Schem
 
 func (r *schemasRepository) UpdateSchema(ctx context.Context, schema *models.Schema) error {
 	return r.db.WithContext(ctx).Save(schema).Error
+}
+
+// UpdateSchemaAnalysis schrijft uitsluitend de analysekolommen van een schema
+// (op id), zodat gelijktijdige wijzigingen aan content/hash/titel niet worden
+// overschreven. Select zorgt dat ook nulwaarden worden opgeslagen.
+func (r *schemasRepository) UpdateSchemaAnalysis(ctx context.Context, schema *models.Schema) error {
+	return r.db.WithContext(ctx).Model(&models.Schema{}).
+		Where("id = ?", schema.Id).
+		Select(
+			"Dependencies", "DependencyCount", "Health",
+			"HealthIssues", "Bytes", "BundledBytes",
+			"DialectUri", "BundledSchemaUrl",
+		).
+		Updates(schema).Error
 }
 
 func (r *schemasRepository) GetSchemas(ctx context.Context, page, perPage int, p *models.SchemaFiltersParams) ([]models.Schema, models.Pagination, error) {
@@ -201,6 +201,11 @@ func (r *schemasRepository) SearchSchemas(ctx context.Context, page, perPage int
 
 func (r *schemasRepository) SaveOrganisatie(organisation *models.Organisation) error {
 	return r.db.Save(organisation).Error
+}
+
+// DeleteSchema verwijdert het schema met het opgegeven id.
+func (r *schemasRepository) DeleteSchema(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&models.Schema{}).Error
 }
 
 func (r *schemasRepository) AllSchemas(ctx context.Context) ([]models.Schema, error) {
@@ -333,7 +338,7 @@ func schemaMatchesQuery(schema models.Schema, query string) bool {
 	return strings.Contains(strings.ToLower(schema.Title), query) ||
 		strings.Contains(strings.ToLower(schema.Description), query) ||
 		strings.Contains(strings.ToLower(schema.SchemaUrl), query) ||
-		strings.Contains(strings.ToLower(schema.SourceMetaPath), query)
+		strings.Contains(strings.ToLower(schema.Path), query)
 }
 
 func containsStr(slice []string, val string) bool {

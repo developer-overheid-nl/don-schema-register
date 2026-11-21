@@ -156,3 +156,42 @@ func TestPublishSchemaToTypesenseErrorStatus(t *testing.T) {
 		t.Fatalf("expected status error, got %v", err)
 	}
 }
+
+func TestDeleteSchemaFromTypesense(t *testing.T) {
+	var gotMethod, gotPath, gotKey string
+	status := http.StatusOK
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath, gotKey = r.Method, r.URL.Path, r.Header.Get("X-TYPESENSE-API-KEY")
+		w.WriteHeader(status)
+	}))
+	defer server.Close()
+	t.Setenv("TYPESENSE_ENDPOINT", server.URL)
+	t.Setenv("TYPESENSE_API_KEY", "secret")
+	t.Setenv("TYPESENSE_COLLECTION", "schema-register")
+	t.Setenv("ENABLE_TYPESENSE", "true")
+
+	if err := deleteSchemaFromTypesense(context.Background(), "abc"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if gotMethod != http.MethodDelete || gotPath != "/collections/schema-register/documents/abc" || gotKey != "secret" {
+		t.Fatalf("request = %s %s key=%q", gotMethod, gotPath, gotKey)
+	}
+
+	status = http.StatusNotFound
+	if err := deleteSchemaFromTypesense(context.Background(), "abc"); err != nil {
+		t.Fatalf("404 moet succes zijn: %v", err)
+	}
+	status = http.StatusInternalServerError
+	if err := deleteSchemaFromTypesense(context.Background(), "abc"); err == nil {
+		t.Fatalf("500 moet een fout geven")
+	}
+}
+
+func TestDeleteSchemaFromTypesenseDisabledIsNoop(t *testing.T) {
+	t.Setenv("TYPESENSE_ENDPOINT", "")
+	t.Setenv("TYPESENSE_API_KEY", "")
+	t.Setenv("TYPESENSE_COLLECTION", "")
+	if err := deleteSchemaFromTypesense(context.Background(), "abc"); err != nil {
+		t.Fatalf("disabled moet no-op zijn: %v", err)
+	}
+}

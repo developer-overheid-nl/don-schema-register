@@ -13,6 +13,7 @@ import (
 	"github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/schemas"
 	"github.com/developer-overheid-nl/don-schema-register/pkg/schema_client/services"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -203,4 +204,31 @@ func TestNormalizePagination(t *testing.T) {
 	if page != 1 || perPage != 100 {
 		t.Fatalf("normalizePagination() = %d, %d; want 1, 100", page, perPage)
 	}
+}
+
+func TestRetrieveSchemaBundle(t *testing.T) {
+	controller, repo := newTestController(t)
+	org := &models.Organisation{Uri: "https://example.org/org", Label: "Example Org"}
+	require.NoError(t, repo.SaveOrganisatie(org))
+	dep := models.Schema{Id: "dep-1", Title: "Dep", Dialect: "2020-12", RootType: "object", OrganisationID: &org.Uri, Hash: "h-dep",
+		Content: map[string]any{"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://example.org/dep", "type": "object"}}
+	main := models.Schema{Id: "main-1", Title: "Main", Dialect: "2020-12", RootType: "object", OrganisationID: &org.Uri, Hash: "h-main",
+		Content: map[string]any{"$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://example.org/main", "type": "object",
+			"properties": map[string]any{"d": map[string]any{"$ref": "https://example.org/dep"}}}}
+	require.NoError(t, repo.SaveSchema(context.Background(), &dep))
+	require.NoError(t, repo.SaveSchema(context.Background(), &main))
+
+	ctx, rec := newGinContext(http.MethodGet, "/v1/schemas/main-1/bundle.json")
+	ctx.Params = gin.Params{{Key: "id", Value: "main-1"}}
+	controller.RetrieveSchemaBundle(ctx)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, "application/schema+json", rec.Header().Get("Content-Type"))
+	require.Contains(t, rec.Body.String(), `"$defs"`)
+	require.Contains(t, rec.Body.String(), "https://example.org/dep")
+
+	ctx, rec = newGinContext(http.MethodGet, "/v1/schemas/onbekend/bundle.json")
+	ctx.Params = gin.Params{{Key: "id", Value: "onbekend"}}
+	controller.RetrieveSchemaBundle(ctx)
+	require.Equal(t, http.StatusNotFound, rec.Code)
+	require.Equal(t, "application/problem+json", rec.Header().Get("Content-Type"))
 }

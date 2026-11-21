@@ -1,0 +1,44 @@
+[
+  {
+    "name": "schema_dialect",
+    "weight": 3,
+    "message": "$schema ontbreekt of is onbekend",
+    "description": "Het schema moet met $schema aangeven welke JSON Schema-dialect (draft) het gebruikt, zodat validators het correct kunnen interpreteren."
+  },
+  {
+    "name": "id_matches_url",
+    "weight": 3,
+    "message": "$id komt niet overeen met de URL van het schema",
+    "description": "Het schema moet een $id hebben die gelijk is aan de URL waarop het bestand staat, zodat verwijzingen ernaar werken. Wordt alleen beoordeeld als de URL van het schema bekend is."
+  },
+  {
+    "name": "top_level_title",
+    "weight": 2,
+    "message": "title ontbreekt",
+    "description": "Het schema moet op het hoogste niveau een title hebben, zodat het in overzichten een leesbare naam heeft."
+  },
+  {
+    "name": "top_level_description",
+    "weight": 2,
+    "message": "description ontbreekt",
+    "description": "Het schema moet op het hoogste niveau een description hebben die uitlegt waarvoor het schema dient."
+  },
+  {
+    "name": "top_level_examples",
+    "weight": 1,
+    "message": "examples ontbreekt of is leeg",
+    "description": "Het schema moet op het hoogste niveau minstens één voorbeeld in examples hebben, zodat gebruikers zien hoe geldige data eruitziet."
+  },
+  {
+    "name": "property_descriptions",
+    "weight": 2,
+    "message": "properties zonder description",
+    "description": "Elke property (ook in geneste schema's en definities) moet een description hebben, tenzij ze via $ref naar een ander schema verwijst, zodat de betekenis van elk veld duidelijk is."
+  },
+  {
+    "name": "unresolved_refs",
+    "weight": 3,
+    "message": "$refs verwijzen naar schemas buiten het register",
+    "description": "Alle $ref-verwijzingen moeten naar schemas binnen het register wijzen, zodat het schema zelfstandig te bundelen en te valideren is."
+  }
+]

@@ -10,13 +10,13 @@ import (
 )
 
 type fakeRefresher struct {
-	count          int
-	err            error
-	called         int
-	harvestCount   int
-	harvestErr     error
-	harvestCalled  int
-	harvestEntries []models.SourceMetaSchemaMetadata
+	count         int
+	err           error
+	called        int
+	harvestCount  int
+	harvestErr    error
+	harvestCalled int
+	harvestInput  models.StaticHarvest
 }
 
 func (f *fakeRefresher) RefreshChangedSchemas(ctx context.Context) (int, error) {
@@ -24,21 +24,21 @@ func (f *fakeRefresher) RefreshChangedSchemas(ctx context.Context) (int, error) 
 	return f.count, f.err
 }
 
-func (f *fakeRefresher) HarvestSourceMetaSchemas(ctx context.Context, entries []models.SourceMetaSchemaMetadata) (int, error) {
+func (f *fakeRefresher) HarvestStaticSchemas(ctx context.Context, harvest models.StaticHarvest) (int, error) {
 	f.harvestCalled++
-	f.harvestEntries = entries
+	f.harvestInput = harvest
 	return f.harvestCount, f.harvestErr
 }
 
-type fakeSourceMetaHarvester struct {
-	entries []models.SourceMetaSchemaMetadata
+type fakeStaticHarvester struct {
+	harvest models.StaticHarvest
 	err     error
 	called  int
 }
 
-func (f *fakeSourceMetaHarvester) Harvest(ctx context.Context) ([]models.SourceMetaSchemaMetadata, error) {
+func (f *fakeStaticHarvester) Harvest(ctx context.Context) (models.StaticHarvest, error) {
 	f.called++
-	return f.entries, f.err
+	return f.harvest, f.err
 }
 
 func TestNewSchemaRefreshJobNilRefresher(t *testing.T) {
@@ -73,15 +73,15 @@ func TestSchemaRefreshJobRunOnceHandlesError(t *testing.T) {
 	}
 }
 
-func TestSchemaRefreshJobRunOnceHarvestsSourceMeta(t *testing.T) {
+func TestSchemaRefreshJobRunOnceHarvestsStatic(t *testing.T) {
 	refresher := &fakeRefresher{harvestCount: 1}
-	harvester := &fakeSourceMetaHarvester{
-		entries: []models.SourceMetaSchemaMetadata{{Name: "crs", Identifier: "https://schemas.example.org/crs"}},
+	harvester := &fakeStaticHarvester{
+		harvest: models.StaticHarvest{Complete: true, ListedURLs: []string{"https://schemas.example.org/crs.json"}},
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	job := &SchemaRefreshJob{refresher: refresher, sourceMetaHarvester: harvester, ctx: ctx}
+	job := &SchemaRefreshJob{refresher: refresher, staticHarvester: harvester, ctx: ctx}
 	job.runOnce()
 
 	if harvester.called != 1 {
@@ -90,8 +90,8 @@ func TestSchemaRefreshJobRunOnceHarvestsSourceMeta(t *testing.T) {
 	if refresher.harvestCalled != 1 {
 		t.Fatalf("harvest called = %d, want 1", refresher.harvestCalled)
 	}
-	if got := refresher.harvestEntries[0].Identifier; got != "https://schemas.example.org/crs" {
-		t.Fatalf("identifier = %q, want SourceMeta entry forwarded", got)
+	if got := refresher.harvestInput.ListedURLs[0]; got != "https://schemas.example.org/crs.json" {
+		t.Fatalf("listed url = %q, want harvest forwarded", got)
 	}
 	if refresher.called != 1 {
 		t.Fatalf("refresh called = %d, want 1", refresher.called)

@@ -76,6 +76,32 @@ func (c *SchemaController) RetrieveSchemaContent(ctx *gin.Context) {
 	ctx.Data(http.StatusOK, "application/schema+json", payload)
 }
 
+// RetrieveSchemaBundle handles GET /schemas/:id/bundle.json en serveert het
+// gebundelde schema (refs binnen het register ingevoegd onder $defs) als
+// application/schema+json.
+func (c *SchemaController) RetrieveSchemaBundle(ctx *gin.Context) {
+	bundle, err := c.Service.BundleSchema(ctx.Request.Context(), ctx.Param("id"))
+	if err != nil {
+		var p problem.ProblemJSON
+		if errors.As(err, &p) {
+			writeProblem(ctx, p)
+			return
+		}
+		writeProblem(ctx, problem.NewInternalServerError(err.Error()))
+		return
+	}
+	if bundle == nil {
+		writeProblem(ctx, problem.NewNotFound("Resource does not exist"))
+		return
+	}
+	payload, err := json.MarshalIndent(bundle, "", "  ")
+	if err != nil {
+		writeProblem(ctx, problem.NewInternalServerError("kan bundel niet serialiseren: "+err.Error()))
+		return
+	}
+	ctx.Data(http.StatusOK, "application/schema+json", payload)
+}
+
 // writeProblem schrijft een ProblemJSON als application/problem+json.
 func writeProblem(ctx *gin.Context, p problem.ProblemJSON) {
 	ctx.Header("Content-Type", "application/problem+json")

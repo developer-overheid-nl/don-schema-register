@@ -3,6 +3,9 @@ package services
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"strings"
 
 	commontypesense "github.com/developer-overheid-nl/don-register-common/typesense"
@@ -172,4 +175,35 @@ func schemaTypesenseLabelWithCode(value string, labels map[string][2]string) str
 		return fmt.Sprintf("%s (%s)", meta[0], value)
 	}
 	return value
+}
+
+// deleteSchemaFromTypesense verwijdert een document uit de Typesense-collectie.
+// Een 404 geldt als succes; bij uitgeschakelde Typesense is dit een no-op.
+func deleteSchemaFromTypesense(ctx context.Context, id string) (err error) {
+	cfg := loadSchemaTypesenseConfigFromEnv()
+	if !cfg.Enabled() {
+		return nil
+	}
+	target := fmt.Sprintf("%s/collections/%s/documents/%s",
+		strings.TrimRight(cfg.Endpoint, "/"), url.PathEscape(cfg.Collection), url.PathEscape(id))
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, target, nil)
+	if err != nil {
+		return fmt.Errorf("typesense: create request: %w", err)
+	}
+	req.Header.Set("X-TYPESENSE-API-KEY", cfg.APIKey)
+
+	resp, err := httpclient.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("typesense: request failed: %w", err)
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("typesense: close response body: %w", closeErr)
+		}
+	}()
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode < http.StatusMultipleChoices {
+		return nil
+	}
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	return fmt.Errorf("typesense: delete failed with status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 }

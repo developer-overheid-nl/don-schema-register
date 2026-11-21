@@ -271,6 +271,46 @@
         ]
       }
     },
+    "/schemas/{id}/bundle.json": {
+      "get": {
+        "tags": [
+          "Public endpoints",
+          "Schemas"
+        ],
+        "summary": "Get bundled schema content",
+        "description": "Returns the JSON Schema document with all transitively referenced schemas from the register embedded under $defs (definitions for draft-04/06/07). $id and $ref values are left unchanged.",
+        "operationId": "getSchemaBundle",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ResourceId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "headers": {
+              "API-Version": {
+                "$ref": "#/components/headers/APIVersion"
+              }
+            },
+            "content": {
+              "application/schema+json": {
+                "schema": {
+                  "type": "object",
+                  "description": "The bundled JSON Schema document"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/schemas/{id}/schema.json": {
       "get": {
         "tags": [
@@ -626,85 +666,6 @@
           "name"
         ]
       },
-      "SourceMetaDependency": {
-        "type": "object",
-        "description": "An outgoing dependency or incoming dependent edge reported by SourceMeta for a stored schema.",
-        "properties": {
-          "from": {
-            "type": "string",
-            "format": "uri",
-            "description": "The schema identifier that contains the reference"
-          },
-          "to": {
-            "type": "string",
-            "format": "uri",
-            "description": "The schema identifier being referenced"
-          },
-          "at": {
-            "type": "string",
-            "description": "JSON Pointer location of the dependency"
-          },
-          "fromSchemaId": {
-            "$ref": "#/components/schemas/ResourceId",
-            "description": "Local schema-register id for the dependency source, when available"
-          },
-          "fromSchemaUrl": {
-            "type": "string",
-            "description": "Frontend path for the dependency source schema, for example schemas/{id}, when available"
-          },
-          "fromSchemaTitle": {
-            "$ref": "#/components/schemas/SchemaTitle",
-            "description": "Local schema-register title for the dependency source, when available"
-          },
-          "toSchemaId": {
-            "$ref": "#/components/schemas/ResourceId",
-            "description": "Local schema-register id for the dependency target, when available"
-          },
-          "toSchemaUrl": {
-            "type": "string",
-            "description": "Frontend path for the dependency target schema, for example schemas/{id}, when available"
-          },
-          "toSchemaTitle": {
-            "$ref": "#/components/schemas/SchemaTitle",
-            "description": "Local schema-register title for the dependency target, when available"
-          }
-        },
-        "required": [
-          "from",
-          "to",
-          "at"
-        ]
-      },
-      "SourceMetaHealthIssue": {
-        "type": "object",
-        "description": "A health issue reported by the SourceMeta One API health endpoint.",
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "Identifier name of the health issue"
-          },
-          "message": {
-            "type": "string",
-            "description": "Human-readable health issue message"
-          },
-          "description": {
-            "type": "string",
-            "description": "Additional health issue description"
-          },
-          "pointers": {
-            "type": "array",
-            "description": "JSON Pointer locations where the issue occurs",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "name",
-          "message",
-          "pointers"
-        ]
-      },
       "SchemaSummary": {
         "type": "object",
         "properties": {
@@ -738,51 +699,38 @@
           "lastCrawledAt": {
             "$ref": "#/components/schemas/LastCrawledAt"
           },
-          "sourceMetaName": {
+          "fileName": {
             "type": "string",
-            "description": "Name reported by the SourceMeta One API entry"
+            "description": "File name of the schema"
           },
-          "sourceMetaPath": {
+          "path": {
             "type": "string",
-            "description": "Relative SourceMeta schema path without the leading /schemas base"
+            "description": "Relative schema path within the source, without the leading /schemas base"
           },
-          "sourceMetaRoot": {
-            "type": "string",
-            "description": "First path segment of sourceMetaPath"
-          },
-          "sourceMetaBundledUrl": {
+          "bundledSchemaUrl": {
             "type": "string",
             "format": "uri",
             "description": "Public URL for downloading the bundled schema"
           },
-          "sourceMetaIdentifier": {
+          "bytes": {
+            "type": "integer",
+            "description": "Original schema size in bytes"
+          },
+          "bundledBytes": {
+            "type": "integer",
+            "description": "Bundled schema size in bytes"
+          },
+          "dialectUri": {
             "type": "string",
-            "format": "uri",
-            "description": "Identifier reported by the SourceMeta One API entry"
+            "description": "Dialect URI of the schema"
           },
-          "sourceMetaBytes": {
+          "health": {
             "type": "integer",
-            "description": "Original schema size in bytes reported by SourceMeta"
+            "description": "Health score of the schema"
           },
-          "sourceMetaBytesBundled": {
+          "dependencyCount": {
             "type": "integer",
-            "description": "Bundled schema size in bytes reported by SourceMeta"
-          },
-          "sourceMetaBaseDialect": {
-            "type": "string",
-            "description": "Base dialect reported by SourceMeta"
-          },
-          "sourceMetaDialect": {
-            "type": "string",
-            "description": "Dialect reported by SourceMeta"
-          },
-          "sourceMetaHealth": {
-            "type": "integer",
-            "description": "Health score reported by SourceMeta"
-          },
-          "sourceMetaDependencies": {
-            "type": "integer",
-            "description": "Number of dependencies reported by SourceMeta"
+            "description": "Number of dependencies of the schema"
           }
         },
         "required": [
@@ -802,18 +750,18 @@
                 "type": "object",
                 "description": "The stored JSON Schema document"
               },
-              "sourceMetaDependencyDetails": {
+              "dependencies": {
                 "type": "array",
-                "description": "Outgoing dependency and incoming dependent edges reported by SourceMeta for this schema",
+                "description": "Outgoing dependency and incoming dependent edges for this schema",
                 "items": {
-                  "$ref": "#/components/schemas/SourceMetaDependency"
+                  "$ref": "#/components/schemas/Dependency"
                 }
               },
-              "sourceMetaHealthIssues": {
+              "healthIssues": {
                 "type": "array",
-                "description": "Health issues reported by SourceMeta for this schema",
+                "description": "Health issues found for this schema",
                 "items": {
-                  "$ref": "#/components/schemas/SourceMetaHealthIssue"
+                  "$ref": "#/components/schemas/HealthIssue"
                 }
               }
             }
@@ -940,6 +888,85 @@
             }
           }
         }
+      },
+      "Dependency": {
+        "type": "object",
+        "description": "An outgoing dependency or incoming dependent edge of a stored schema.",
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "uri",
+            "description": "The schema identifier that contains the reference"
+          },
+          "to": {
+            "type": "string",
+            "format": "uri",
+            "description": "The schema identifier being referenced"
+          },
+          "at": {
+            "type": "string",
+            "description": "JSON Pointer location of the dependency"
+          },
+          "fromSchemaId": {
+            "$ref": "#/components/schemas/ResourceId",
+            "description": "Local schema-register id for the dependency source, when available"
+          },
+          "fromSchemaUrl": {
+            "type": "string",
+            "description": "Frontend path for the dependency source schema, for example schemas/{id}, when available"
+          },
+          "fromSchemaTitle": {
+            "$ref": "#/components/schemas/SchemaTitle",
+            "description": "Local schema-register title for the dependency source, when available"
+          },
+          "toSchemaId": {
+            "$ref": "#/components/schemas/ResourceId",
+            "description": "Local schema-register id for the dependency target, when available"
+          },
+          "toSchemaUrl": {
+            "type": "string",
+            "description": "Frontend path for the dependency target schema, for example schemas/{id}, when available"
+          },
+          "toSchemaTitle": {
+            "$ref": "#/components/schemas/SchemaTitle",
+            "description": "Local schema-register title for the dependency target, when available"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "at"
+        ]
+      },
+      "HealthIssue": {
+        "type": "object",
+        "description": "A health issue found when analysing a stored schema.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Identifier name of the health issue"
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable health issue message"
+          },
+          "description": {
+            "type": "string",
+            "description": "Additional health issue description"
+          },
+          "pointers": {
+            "type": "array",
+            "description": "JSON Pointer locations where the issue occurs",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "message",
+          "pointers"
+        ]
       }
     },
     "parameters": {
